@@ -37,3 +37,6 @@ docker-compose.override.yml
 
 # Local working context (research/plan artifacts)
 .context/
+
+# CDK output artifacts
+infra/cdk.out/

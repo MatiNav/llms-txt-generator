@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from aws_cdk import CfnOutput, Stack
+from aws_cdk import CfnOutput, IgnoreMode, Stack
 from aws_cdk import aws_apprunner as apprunner
 from aws_cdk import aws_ecr_assets as ecr_assets
 from aws_cdk import aws_iam as iam
@@ -25,6 +25,13 @@ class ServerRuntimeStack(Stack):
             "ServerImageAsset",
             directory=str(repository_root),
             file="app/server/Dockerfile",
+            ignore_mode=IgnoreMode.GLOB,
+            exclude=[
+                "infra/cdk.out",
+                "infra/.venv",
+                "**/__pycache__",
+                "**/.pytest_cache",
+            ],
         )
 
         app_runner_ecr_access_role = iam.Role(

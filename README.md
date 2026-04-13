@@ -24,7 +24,8 @@ Implemented now:
 - CDK infra scaffold (`infra/`) with:
   - discoverable queue + DLQ
   - App Runner runtime IAM role with `sqs:SendMessage`
-  - App Runner runtime stack wiring for server container + env injection (`AWS_REGION`, `DISCOVERABLE_QUEUE_URL`)
+  - App Runner runtime stack wiring for server container + env injection (`AWS_REGION`, `DISCOVERABLE_QUEUE_URL`, `DATABASE_URL`)
+  - Challenge-mode RDS PostgreSQL in public subnets for full endpoint validation
 
 Still pending:
 - Worker runtimes (orchestrator, fetchers, processing)
@@ -160,8 +161,8 @@ DATABASE_URL="postgresql+asyncpg://llmstxt:llmstxt@localhost:5432/llmstxt" \
 ```bash
 uv pip install -r infra/requirements.txt
 cd infra
-cdk synth -c database_url="postgresql://user:password@host:5432/llmstxt"
-cdk deploy --all -c database_url="postgresql://user:password@host:5432/llmstxt" --require-approval never
+cdk synth
+cdk deploy --all --require-approval never
 ```
 
 ## Database Schema
