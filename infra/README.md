@@ -17,6 +17,7 @@ This infra scope is intentionally minimal and supports the current backend slice
 - `DiscoverableQueueUrl` → `DISCOVERABLE_QUEUE_URL`
 - `AwsRegion` → `AWS_REGION`
 - `ServerRuntimeRoleArn` → App Runner instance role ARN
+- App Runner runtime also receives `DATABASE_URL` from CDK context (`-c database_url=...`)
 
 ## Commands
 
@@ -26,17 +27,22 @@ From `infra/`:
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-cdk synth
-cdk deploy --require-approval never
+cdk synth -c database_url="postgresql://user:password@host:5432/llmstxt"
+cdk deploy --all -c database_url="postgresql://user:password@host:5432/llmstxt" --require-approval never
 ```
 
 Optional context overrides:
 
 ```bash
-cdk deploy -c account=123456789012 -c region=us-east-1 --require-approval never
+cdk deploy --all \
+  -c account=123456789012 \
+  -c region=us-east-1 \
+  -c database_url="postgresql://user:password@host:5432/llmstxt" \
+  --require-approval never
 ```
 
 ## Notes
 
-- This CDK app now deploys both messaging baseline and App Runner runtime wiring for Slice 2.
-- DB env + network wiring remain required for the server runtime to access PostgreSQL.
+- This CDK app deploys both messaging baseline and App Runner runtime wiring for Slice 2.
+- A `database_url` CDK context value is required to synth/deploy.
+- Network reachability from App Runner to the database endpoint is still required for runtime health.

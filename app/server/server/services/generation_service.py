@@ -33,41 +33,28 @@ class GenerationService:
 
         inflight_run = await self._get_inflight_run(site_id=site.id)
         if inflight_run is not None:
-            log_event(
-                logger,
-                logging.INFO,
-                "run.coalesced",
-                service="server",
-                component="generation_service",
-                request_id=request_id,
-                run_id=str(inflight_run.id),
-                site_id=str(site.id),
-                state=inflight_run.state,
-                coalesced=True,
-            )
+            self._log_coalesced_run(inflight_run, site.id, request_id)
             return inflight_run, True
 
         created_run = await self._create_run_or_coalesce(site_id=site.id)
-        coalesced = created_run is None
 
         if created_run is None:
             inflight_after_race = await self._get_inflight_run(site_id=site.id)
             if inflight_after_race is None:
                 raise RuntimeError("Run coalescing failed after integrity conflict")
 
-            log_event(
-                logger,
-                logging.INFO,
-                "run.coalesced",
-                service="server",
-                component="generation_service",
-                request_id=request_id,
-                run_id=str(inflight_after_race.id),
-                site_id=str(site.id),
-                state=inflight_after_race.state,
-                coalesced=True,
-            )
+            self._log_coalesced_run(inflight_after_race, site.id, request_id)
             return inflight_after_race, True
+
+        await self.sqs_client.send_message(
+            {
+                "run_id": str(created_run.id),
+                "site_id": str(site.id),
+                "url": canonical_root_url,
+                "depth": 0,
+            },
+            request_id=request_id,
+        )
 
         log_event(
             logger,
@@ -81,16 +68,7 @@ class GenerationService:
             state=created_run.state,
         )
 
-        await self.sqs_client.send_message(
-            {
-                "run_id": str(created_run.id),
-                "site_id": str(site.id),
-                "url": canonical_root_url,
-                "depth": 0,
-            },
-            request_id=request_id,
-        )
-        return created_run, coalesced
+        return created_run, False
 
     async def _find_or_create_site(
         self,
@@ -100,16 +78,7 @@ class GenerationService:
     ) -> Site:
         existing_site = await self._get_site_by_root_url(root_url=root_url)
         if existing_site is not None:
-            log_event(
-                logger,
-                logging.INFO,
-                "site.found_existing",
-                service="server",
-                component="generation_service",
-                request_id=request_id,
-                site_id=str(existing_site.id),
-                normalized_host=existing_site.normalized_host,
-            )
+            self._log_existing_site(existing_site, request_id)
             return existing_site
 
         created_site = Site(root_url=root_url, normalized_host=normalized_host)
@@ -135,6 +104,29 @@ class GenerationService:
         if race_site is None:
             raise RuntimeError("Site creation failed after integrity conflict")
 
+        self._log_existing_site(race_site, request_id)
+        return race_site
+
+    def _log_coalesced_run(
+        self,
+        run: Run,
+        site_id: object,
+        request_id: str | None,
+    ) -> None:
+        log_event(
+            logger,
+            logging.INFO,
+            "run.coalesced",
+            service="server",
+            component="generation_service",
+            request_id=request_id,
+            run_id=str(run.id),
+            site_id=str(site_id),
+            state=run.state,
+            coalesced=True,
+        )
+
+    def _log_existing_site(self, site: Site, request_id: str | None) -> None:
         log_event(
             logger,
             logging.INFO,
@@ -142,10 +134,9 @@ class GenerationService:
             service="server",
             component="generation_service",
             request_id=request_id,
-            site_id=str(race_site.id),
-            normalized_host=race_site.normalized_host,
+            site_id=str(site.id),
+            normalized_host=site.normalized_host,
         )
-        return race_site
 
     async def _create_run_or_coalesce(self, site_id: object) -> Run | None:
         created_run = Run(

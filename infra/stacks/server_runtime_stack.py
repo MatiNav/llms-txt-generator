@@ -13,6 +13,7 @@ class ServerRuntimeStack(Stack):
         scope: Construct,
         construct_id: str,
         discoverable_queue_url: str,
+        database_url: str,
         server_runtime_role_arn: str,
         **kwargs,
     ) -> None:
@@ -64,6 +65,10 @@ class ServerRuntimeStack(Stack):
                             apprunner.CfnService.KeyValuePairProperty(
                                 name="DISCOVERABLE_QUEUE_URL",
                                 value=discoverable_queue_url,
+                            ),
+                            apprunner.CfnService.KeyValuePairProperty(
+                                name="DATABASE_URL",
+                                value=database_url,
                             ),
                         ],
                     ),

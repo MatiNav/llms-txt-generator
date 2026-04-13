@@ -1,7 +1,6 @@
 import os
 from functools import lru_cache
 
-from sqlalchemy import URL
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 ASYNC_DRIVER = "postgresql+asyncpg"
@@ -22,25 +21,11 @@ def _normalize_async_url(raw_url: str) -> str:
 
 @lru_cache(maxsize=1)
 def get_database_url() -> str:
-    """Build async PostgreSQL URL from environment variables.
-
-    Supports two modes:
-    - DATABASE_URL env var (local dev — auto-normalized to asyncpg dialect)
-    - Individual DB_* env vars (deployed environments)
-    """
+    """Build async PostgreSQL URL from DATABASE_URL environment variable."""
     database_url = os.environ.get("DATABASE_URL")
-    if database_url:
-        return _normalize_async_url(database_url)
-
-    # URL.create handles special characters in credentials safely
-    return URL.create(
-        drivername=ASYNC_DRIVER,
-        username=os.environ["DB_USER"],
-        password=os.environ["DB_PASSWORD"],
-        host=os.environ["DB_HOST"],
-        port=int(os.environ.get("DB_PORT", "5432")),
-        database=os.environ.get("DB_NAME", "llmstxt"),
-    ).render_as_string(hide_password=False)
+    if not database_url:
+        raise RuntimeError("Missing required environment variable: DATABASE_URL")
+    return _normalize_async_url(database_url)
 
 
 @lru_cache(maxsize=1)

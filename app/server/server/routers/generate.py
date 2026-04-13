@@ -37,34 +37,23 @@ async def generate(
             requested_url=payload.url,
             request_id=request_id,
         )
-    except ValueError as value_error:
+    except (ValueError, RuntimeError) as error:
+        is_client_error = isinstance(error, ValueError)
         log_event(
             logger,
-            logging.WARNING,
+            logging.WARNING if is_client_error else logging.ERROR,
             "api.generate.request_failed",
             service="server",
             component="generate_router",
             request_id=request_id,
             url_host=url_host,
-            error_type=type(value_error).__name__,
-            error_message=str(value_error),
-        )
-        raise HTTPException(status_code=400, detail=str(value_error)) from value_error
-    except RuntimeError as runtime_error:
-        log_event(
-            logger,
-            logging.ERROR,
-            "api.generate.request_failed",
-            service="server",
-            component="generate_router",
-            request_id=request_id,
-            url_host=url_host,
-            error_type=type(runtime_error).__name__,
-            error_message=str(runtime_error),
+            error_type=type(error).__name__,
+            error_message=str(error),
         )
         raise HTTPException(
-            status_code=500, detail="Failed to generate run"
-        ) from runtime_error
+            status_code=400 if is_client_error else 500,
+            detail=str(error) if is_client_error else "Failed to generate run",
+        ) from error
 
     response_payload = GenerateResponse(
         run_id=run.id,

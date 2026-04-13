@@ -35,22 +35,17 @@ async def test_generate_coalesces_concurrent_requests(
 
     engine = get_engine()
     async with engine.connect() as connection:
-        counts = (
-            (
-                await connection.execute(
-                    text(
-                        """
-                    SELECT
-                        (SELECT COUNT(*) FROM sites) AS sites_count,
-                        (SELECT COUNT(*) FROM runs) AS runs_count,
-                        (SELECT COUNT(*) FROM runs WHERE state IN ('discovering','processing')) AS inflight_count
-                    """
-                    )
-                )
+        query_result = await connection.execute(
+            text(
+                """
+                SELECT
+                    (SELECT COUNT(*) FROM sites) AS sites_count,
+                    (SELECT COUNT(*) FROM runs) AS runs_count,
+                    (SELECT COUNT(*) FROM runs WHERE state IN ('discovering','processing')) AS inflight_count
+                """
             )
-            .mappings()
-            .first()
         )
+        counts = query_result.mappings().first()
 
     assert counts is not None
     assert counts["sites_count"] == 1

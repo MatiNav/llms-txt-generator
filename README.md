@@ -160,8 +160,8 @@ DATABASE_URL="postgresql+asyncpg://llmstxt:llmstxt@localhost:5432/llmstxt" \
 ```bash
 uv pip install -r infra/requirements.txt
 cd infra
-cdk synth
-cdk deploy --all --require-approval never
+cdk synth -c database_url="postgresql://user:password@host:5432/llmstxt"
+cdk deploy --all -c database_url="postgresql://user:password@host:5432/llmstxt" --require-approval never
 ```
 
 ## Database Schema
