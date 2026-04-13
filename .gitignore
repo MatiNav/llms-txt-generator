@@ -1,0 +1,38 @@
+# Challenge context — private planning docs, not for the repo
+profound-challenge-context/
+
+LLMs.txt-Generator-Version3.md
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+*.egg-info/
+dist/
+build/
+
+# Virtual environments
+.venv/
+venv/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment variables
+.env
+.env.local
+.env.*
+!.env.example
+
+# Docker — local dev and overrides
+docker-compose.local.yml
+docker-compose.override.yml
+
+# Local working context (research/plan artifacts)
+.context/
