@@ -1,0 +1,16 @@
+from typing import Literal, TypeAlias
+
+
+RUN_STATE_DISCOVERING = "discovering"
+RUN_STATE_PROCESSING = "processing"
+RUN_STATE_COMPLETED = "completed"
+RUN_STATE_FAILED = "failed"
+
+INFLIGHT_RUN_STATES = (RUN_STATE_DISCOVERING, RUN_STATE_PROCESSING)
+
+RunStateValue: TypeAlias = Literal[
+    RUN_STATE_DISCOVERING,
+    RUN_STATE_PROCESSING,
+    RUN_STATE_COMPLETED,
+    RUN_STATE_FAILED,
+]
