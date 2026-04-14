@@ -1,13 +1,13 @@
 from pathlib import Path
 
-from aws_cdk import CfnOutput, IgnoreMode, Stack
+from aws_cdk import IgnoreMode
 from aws_cdk import aws_apprunner as apprunner
 from aws_cdk import aws_ecr_assets as ecr_assets
 from aws_cdk import aws_iam as iam
 from constructs import Construct
 
 
-class ServerRuntimeStack(Stack):
+class GenerateApiService(Construct):
     def __init__(
         self,
         scope: Construct,
@@ -15,9 +15,9 @@ class ServerRuntimeStack(Stack):
         discoverable_queue_url: str,
         database_url: str,
         server_runtime_role_arn: str,
-        **kwargs,
+        region_name: str,
     ) -> None:
-        super().__init__(scope, construct_id, **kwargs)
+        super().__init__(scope, construct_id)
 
         repository_root = Path(__file__).resolve().parents[2]
         server_image_asset = ecr_assets.DockerImageAsset(
@@ -25,6 +25,7 @@ class ServerRuntimeStack(Stack):
             "ServerImageAsset",
             directory=str(repository_root),
             file="app/server/Dockerfile",
+            platform=ecr_assets.Platform.LINUX_AMD64,
             ignore_mode=IgnoreMode.GLOB,
             exclude=[
                 "infra/cdk.out",
@@ -67,7 +68,7 @@ class ServerRuntimeStack(Stack):
                         runtime_environment_variables=[
                             apprunner.CfnService.KeyValuePairProperty(
                                 name="AWS_REGION",
-                                value=self.region,
+                                value=region_name,
                             ),
                             apprunner.CfnService.KeyValuePairProperty(
                                 name="DISCOVERABLE_QUEUE_URL",
@@ -88,9 +89,4 @@ class ServerRuntimeStack(Stack):
             ),
         )
 
-        CfnOutput(
-            self,
-            "ServerServiceUrl",
-            value=f"https://{server_service.attr_service_url}",
-            description="Public URL for the App Runner server",
-        )
+        self.server_service = server_service

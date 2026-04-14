@@ -1,12 +1,12 @@
-from aws_cdk import CfnOutput, Duration, RemovalPolicy, Stack
+from aws_cdk import Duration, RemovalPolicy
 from aws_cdk import aws_ec2 as ec2
 from aws_cdk import aws_rds as rds
 from constructs import Construct
 
 
-class ServerDataStack(Stack):
-    def __init__(self, scope: Construct, construct_id: str, **kwargs) -> None:
-        super().__init__(scope, construct_id, **kwargs)
+class GenerationDataStorage(Construct):
+    def __init__(self, scope: Construct, construct_id: str) -> None:
+        super().__init__(scope, construct_id)
 
         database_name = "llmstxt"
         database_username = "llmstxt"
@@ -44,7 +44,10 @@ class ServerDataStack(Stack):
             self,
             "ServerDatabase",
             engine=rds.DatabaseInstanceEngine.postgres(
-                version=rds.PostgresEngineVersion.VER_16_3,
+                version=rds.PostgresEngineVersion.of(
+                    postgres_full_version="16.13",
+                    postgres_major_version="16",
+                ),
             ),
             vpc=service_vpc,
             vpc_subnets=ec2.SubnetSelection(subnet_type=ec2.SubnetType.PUBLIC),
@@ -75,36 +78,12 @@ class ServerDataStack(Stack):
         database_password = database_secret.secret_value_from_json(
             "password"
         ).to_string()
+
         self.database_url = (
             f"postgresql+asyncpg://{database_username}:{database_password}@"
             f"{database_instance.db_instance_endpoint_address}:"
             f"{database_instance.db_instance_endpoint_port}/{database_name}"
         )
-
-        CfnOutput(
-            self,
-            "DatabaseEndpointAddress",
-            value=database_instance.db_instance_endpoint_address,
-            description="PostgreSQL endpoint hostname",
-        )
-
-        CfnOutput(
-            self,
-            "DatabasePort",
-            value=database_instance.db_instance_endpoint_port,
-            description="PostgreSQL endpoint port",
-        )
-
-        CfnOutput(
-            self,
-            "DatabaseName",
-            value=database_name,
-            description="Database name used by the server",
-        )
-
-        CfnOutput(
-            self,
-            "DatabaseSecretArn",
-            value=database_secret.secret_arn,
-            description="Secrets Manager ARN containing DB credentials",
-        )
+        self.database_instance = database_instance
+        self.database_secret = database_secret
+        self.database_name = database_name

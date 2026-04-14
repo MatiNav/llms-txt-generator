@@ -162,7 +162,7 @@ DATABASE_URL="postgresql+asyncpg://llmstxt:llmstxt@localhost:5432/llmstxt" \
 uv pip install -r infra/requirements.txt
 cd infra
 cdk synth
-cdk deploy --all --require-approval never
+cdk deploy LlmTxtGeneratorStack --require-approval never
 ```
 
 ## Database Schema

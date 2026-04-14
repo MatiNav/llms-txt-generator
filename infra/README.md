@@ -2,6 +2,8 @@
 
 This infra scope is intentionally minimal and supports the current backend slice (`POST /api/generate` + coalescing).
 
+Deployment model: **single stack** (`LlmTxtGeneratorStack`) composed from internal components.
+
 ## What this CDK app creates
 
 - `llmstxt-discoverable` SQS queue
@@ -18,9 +20,8 @@ This infra scope is intentionally minimal and supports the current backend slice
 ## Outputs used by the server runtime
 
 - `DiscoverableQueueUrl` → `DISCOVERABLE_QUEUE_URL`
-- `AwsRegion` → `AWS_REGION`
 - `ServerRuntimeRoleArn` → App Runner instance role ARN
-- App Runner runtime receives `DATABASE_URL` from `ServerDataStack`
+- App Runner runtime receives `DATABASE_URL` from the data component inside `LlmTxtGeneratorStack`
 
 ## Commands
 
@@ -31,13 +32,13 @@ uv venv --python 3.12
 source .venv/bin/activate
 uv pip install -r requirements.txt
 cdk synth
-cdk deploy --all --require-approval never
+cdk deploy LlmTxtGeneratorStack --require-approval never
 ```
 
 Optional context overrides:
 
 ```bash
-cdk deploy --all \
+cdk deploy LlmTxtGeneratorStack \
   -c account=123456789012 \
   -c region=us-east-1 \
   --require-approval never
@@ -45,7 +46,7 @@ cdk deploy --all \
 
 ## Notes
 
-- This CDK app deploys both messaging baseline and App Runner runtime wiring for Slice 2.
+- This CDK app deploys messaging, runtime, and data resources in one stack for Slice 2.
 - `DATABASE_URL` is generated from the RDS instance and injected into App Runner runtime env.
 - Challenge-mode networking uses public subnets to avoid NAT cost/complexity during evaluation.
 - Production should move RDS to private subnets and route egress through NAT gateways and/or VPC endpoints.
