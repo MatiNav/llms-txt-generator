@@ -3,6 +3,7 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 from server.dependencies import get_generation_service
+from server.errors.generation import InflightModeConflictError
 from server.schemas.generate import GenerateRequest, GenerateResponse
 from server.services.generation_service import GenerationService
 from shared.logging import log_event
@@ -35,8 +36,21 @@ async def generate(
     try:
         run, coalesced = await generation_service.generate(
             requested_url=payload.url,
+            requested_render_mode=payload.render_mode,
             request_id=request_id,
         )
+    except InflightModeConflictError as error:
+        log_event(
+            logger,
+            logging.WARNING,
+            "api.generate.mode_conflict",
+            service="server",
+            component="generate_router",
+            request_id=request_id,
+            url_host=url_host,
+            error_message=str(error),
+        )
+        raise HTTPException(status_code=409, detail=str(error)) from error
     except (ValueError, RuntimeError) as error:
         is_client_error = isinstance(error, ValueError)
         log_event(
