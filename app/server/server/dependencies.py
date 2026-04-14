@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from server.config import get_server_settings
 from server.services.generation_service import GenerationService
 from shared.db.session import get_db_session
-from shared.queue.sqs_client import SQSClient
+from shared.queue.sns_client import SNSClient
 
 
 async def get_database_session() -> AsyncGenerator[AsyncSession, None]:
@@ -14,16 +14,20 @@ async def get_database_session() -> AsyncGenerator[AsyncSession, None]:
         yield database_session
 
 
-def get_sqs_client() -> SQSClient:
+def get_sns_client() -> SNSClient:
     settings = get_server_settings()
-    return SQSClient(
+    return SNSClient(
         region_name=settings.aws_region,
-        queue_url=settings.discoverable_queue_url,
     )
 
 
 def get_generation_service(
     database_session: AsyncSession = Depends(get_database_session),
-    sqs_client: SQSClient = Depends(get_sqs_client),
+    sns_client: SNSClient = Depends(get_sns_client),
 ) -> GenerationService:
-    return GenerationService(database_session=database_session, sqs_client=sqs_client)
+    settings = get_server_settings()
+    return GenerationService(
+        database_session=database_session,
+        sns_client=sns_client,
+        discoverable_topic_arn=settings.discoverable_topic_arn,
+    )

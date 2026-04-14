@@ -12,7 +12,7 @@ class GenerateApiService(Construct):
         self,
         scope: Construct,
         construct_id: str,
-        discoverable_queue_url: str,
+        discoverable_topic_arn: str,
         database_url: str,
         server_runtime_role_arn: str,
         region_name: str,
@@ -71,8 +71,8 @@ class GenerateApiService(Construct):
                                 value=region_name,
                             ),
                             apprunner.CfnService.KeyValuePairProperty(
-                                name="DISCOVERABLE_QUEUE_URL",
-                                value=discoverable_queue_url,
+                                name="DISCOVERABLE_TOPIC_ARN",
+                                value=discoverable_topic_arn,
                             ),
                             apprunner.CfnService.KeyValuePairProperty(
                                 name="DATABASE_URL",

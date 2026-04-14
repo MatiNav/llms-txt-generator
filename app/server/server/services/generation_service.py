@@ -7,8 +7,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from shared.models.run import Run
 from shared.models.site import Site
 from shared.logging import log_event
-from shared.queue.sqs_client import SQSClient
-from server.utils.url import normalize_site_url
+from shared.pipeline.url_norm import canonical_root_url
+from shared.queue.sns_client import SNSClient
 
 
 INFLIGHT_STATES = ("discovering", "processing")
@@ -16,17 +16,23 @@ logger = logging.getLogger(__name__)
 
 
 class GenerationService:
-    def __init__(self, database_session: AsyncSession, sqs_client: SQSClient) -> None:
+    def __init__(
+        self,
+        database_session: AsyncSession,
+        sns_client: SNSClient,
+        discoverable_topic_arn: str,
+    ) -> None:
         self.database_session = database_session
-        self.sqs_client = sqs_client
+        self.sns_client = sns_client
+        self.discoverable_topic_arn = discoverable_topic_arn
 
     async def generate(
         self, requested_url: str, request_id: str | None = None
     ) -> tuple[Run, bool]:
-        canonical_root_url, normalized_host = normalize_site_url(requested_url)
+        canonical_site_root_url, normalized_host = canonical_root_url(requested_url)
 
         site = await self._find_or_create_site(
-            root_url=canonical_root_url,
+            root_url=canonical_site_root_url,
             normalized_host=normalized_host,
             request_id=request_id,
         )
@@ -46,11 +52,12 @@ class GenerationService:
             self._log_coalesced_run(inflight_after_race, site.id, request_id)
             return inflight_after_race, True
 
-        await self.sqs_client.send_message(
-            {
+        await self.sns_client.publish_message(
+            topic_arn=self.discoverable_topic_arn,
+            payload={
                 "run_id": str(created_run.id),
                 "site_id": str(site.id),
-                "url": canonical_root_url,
+                "url": canonical_site_root_url,
                 "depth": 0,
             },
             request_id=request_id,
