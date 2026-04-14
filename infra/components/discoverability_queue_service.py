@@ -48,21 +48,40 @@ class DiscoverabilityQueueService(Construct):
             ),
         )
 
-        playwright_fetch_dead_letter_queue = sqs.Queue(
+        spa_fetch_dead_letter_queue = sqs.Queue(
             self,
-            "PlaywrightFetchDeadLetterQueue",
-            queue_name="llmstxt-playwright-fetch-dlq",
+            "SpaFetchDeadLetterQueue",
+            queue_name="llmstxt-spa-fetch-dlq",
             retention_period=Duration.days(14),
         )
 
-        playwright_fetch_queue = sqs.Queue(
+        spa_fetch_queue = sqs.Queue(
             self,
-            "PlaywrightFetchQueue",
-            queue_name="llmstxt-playwright-fetch",
+            "SpaFetchQueue",
+            queue_name="llmstxt-spa-fetch",
             visibility_timeout=Duration.seconds(180),
             receive_message_wait_time=Duration.seconds(20),
             dead_letter_queue=sqs.DeadLetterQueue(
-                queue=playwright_fetch_dead_letter_queue,
+                queue=spa_fetch_dead_letter_queue,
+                max_receive_count=5,
+            ),
+        )
+
+        processing_dead_letter_queue = sqs.Queue(
+            self,
+            "ProcessingDeadLetterQueue",
+            queue_name="llmstxt-processing-dlq",
+            retention_period=Duration.days(14),
+        )
+
+        processing_queue = sqs.Queue(
+            self,
+            "ProcessingQueue",
+            queue_name="llmstxt-processing",
+            visibility_timeout=Duration.seconds(120),
+            receive_message_wait_time=Duration.seconds(20),
+            dead_letter_queue=sqs.DeadLetterQueue(
+                queue=processing_dead_letter_queue,
                 max_receive_count=5,
             ),
         )
@@ -77,6 +96,11 @@ class DiscoverabilityQueueService(Construct):
             "FetchEventsTopic",
             topic_name="llmstxt-fetch-events",
         )
+        processing_events_topic = sns.Topic(
+            self,
+            "ProcessingEventsTopic",
+            topic_name="llmstxt-processing-events",
+        )
 
         discoverable_events_topic.add_subscription(
             sns_subscriptions.SqsSubscription(
@@ -89,19 +113,27 @@ class DiscoverabilityQueueService(Construct):
                 http_fetch_queue,
                 raw_message_delivery=True,
                 filter_policy={
-                    "strategy": sns.SubscriptionFilter.string_filter(allowlist=["http"])
+                    "render_mode": sns.SubscriptionFilter.string_filter(
+                        allowlist=["http"]
+                    )
                 },
             )
         )
         fetch_events_topic.add_subscription(
             sns_subscriptions.SqsSubscription(
-                playwright_fetch_queue,
+                spa_fetch_queue,
                 raw_message_delivery=True,
                 filter_policy={
-                    "strategy": sns.SubscriptionFilter.string_filter(
-                        allowlist=["playwright"]
+                    "render_mode": sns.SubscriptionFilter.string_filter(
+                        allowlist=["spa"]
                     )
                 },
+            )
+        )
+        processing_events_topic.add_subscription(
+            sns_subscriptions.SqsSubscription(
+                processing_queue,
+                raw_message_delivery=True,
             )
         )
 
@@ -117,8 +149,11 @@ class DiscoverabilityQueueService(Construct):
         self.discoverable_queue = discoverable_queue
         self.http_fetch_dead_letter_queue = http_fetch_dead_letter_queue
         self.http_fetch_queue = http_fetch_queue
-        self.playwright_fetch_dead_letter_queue = playwright_fetch_dead_letter_queue
-        self.playwright_fetch_queue = playwright_fetch_queue
+        self.spa_fetch_dead_letter_queue = spa_fetch_dead_letter_queue
+        self.spa_fetch_queue = spa_fetch_queue
+        self.processing_dead_letter_queue = processing_dead_letter_queue
+        self.processing_queue = processing_queue
         self.discoverable_events_topic = discoverable_events_topic
         self.fetch_events_topic = fetch_events_topic
+        self.processing_events_topic = processing_events_topic
         self.server_runtime_role = server_runtime_role

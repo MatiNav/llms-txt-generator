@@ -13,6 +13,17 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from shared.models.base import Base
+from shared.constants.run_state import (
+    RUN_STATE_COMPLETED,
+    RUN_STATE_DISCOVERING,
+    RUN_STATE_FAILED,
+    RUN_STATE_PROCESSING,
+)
+from shared.constants.run_limits import DEFAULT_MAX_PAGES_PER_RUN
+from shared.constants.trigger_reason import (
+    TRIGGER_REASON_CRON,
+    TRIGGER_REASON_ON_DEMAND,
+)
 
 
 class Run(Base):
@@ -33,11 +44,7 @@ class Run(Base):
     state: Mapped[str] = mapped_column(
         String,
         nullable=False,
-        default="discovering",
-    )
-    strategy: Mapped[str | None] = mapped_column(
-        String,
-        nullable=True,
+        default=RUN_STATE_DISCOVERING,
     )
     max_depth: Mapped[int] = mapped_column(
         SmallInteger,
@@ -47,7 +54,7 @@ class Run(Base):
     max_pages: Mapped[int] = mapped_column(
         Integer,
         nullable=False,
-        default=200,
+        default=DEFAULT_MAX_PAGES_PER_RUN,
     )
 
     # When pages_completed == pages_queued → trigger processing pipeline.
@@ -75,6 +82,9 @@ class Run(Base):
         String,
         nullable=True,
     )
+    processing_enqueued_at: Mapped[datetime | None] = mapped_column(
+        nullable=True,
+    )
     created_at: Mapped[datetime] = mapped_column(
         nullable=False,
         server_default=text("now()"),
@@ -97,11 +107,11 @@ class Run(Base):
 
     __table_args__ = (
         CheckConstraint(
-            "trigger_reason IN ('on_demand', 'cron')",
+            f"trigger_reason IN ('{TRIGGER_REASON_ON_DEMAND}', '{TRIGGER_REASON_CRON}')",
             name="valid_trigger_reason",
         ),
         CheckConstraint(
-            "state IN ('discovering', 'processing', 'completed', 'failed')",
+            f"state IN ('{RUN_STATE_DISCOVERING}', '{RUN_STATE_PROCESSING}', '{RUN_STATE_COMPLETED}', '{RUN_STATE_FAILED}')",
             name="valid_state",
         ),
         # Prevent duplicate in-flight runs for the same site
@@ -109,7 +119,9 @@ class Run(Base):
             "uq_runs_site_inflight",
             "site_id",
             unique=True,
-            postgresql_where=text("state IN ('discovering', 'processing')"),
+            postgresql_where=text(
+                f"state IN ('{RUN_STATE_DISCOVERING}', '{RUN_STATE_PROCESSING}')"
+            ),
         ),
         Index("idx_runs_site_created", "site_id", "created_at"),
     )

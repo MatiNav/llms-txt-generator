@@ -19,6 +19,10 @@ async def main_async() -> None:
         region_name=runtime_config.aws_region,
         service_name="orchestrator",
     )
+    processing_topic_client = SNSClient(
+        region_name=runtime_config.aws_region,
+        service_name="orchestrator",
+    )
 
     while True:
         messages = await discoverable_queue_client.receive_messages(
@@ -33,7 +37,9 @@ async def main_async() -> None:
                 raw_message=raw_message,
                 discoverable_queue_client=discoverable_queue_client,
                 routing_topic_client=routing_topic_client,
+                processing_topic_client=processing_topic_client,
                 fetch_topic_arn=runtime_config.fetch_topic_arn,
+                processing_topic_arn=runtime_config.processing_topic_arn,
             )
             for raw_message in messages
         ]

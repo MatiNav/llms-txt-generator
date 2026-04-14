@@ -4,7 +4,10 @@ from constructs import Construct
 from components.discoverability_queue_service import DiscoverabilityQueueService
 from components.generate_api_service import GenerateApiService
 from components.generation_data_storage import GenerationDataStorage
+from components.http_fetcher_service import HttpFetcherService
 from components.orchestrator_service import OrchestratorService
+from components.raw_html_storage import RawHtmlStorage
+from components.spa_fetcher_service import SpaFetcherService
 
 
 class LlmTxtGeneratorStack(Stack):
@@ -14,6 +17,7 @@ class LlmTxtGeneratorStack(Stack):
         discoverability_queue_service = DiscoverabilityQueueService(
             self, "DiscoverabilityQueueService"
         )
+        raw_html_storage = RawHtmlStorage(self, "RawHtmlStorage")
         generation_data_storage = GenerationDataStorage(self, "GenerationDataStorage")
         generate_api_service = GenerateApiService(
             self,
@@ -32,6 +36,26 @@ class LlmTxtGeneratorStack(Stack):
             database_url=generation_data_storage.database_url,
             discoverable_queue=discoverability_queue_service.discoverable_queue,
             fetch_events_topic=discoverability_queue_service.fetch_events_topic,
+            processing_events_topic=discoverability_queue_service.processing_events_topic,
+        )
+        http_fetcher_service = HttpFetcherService(
+            self,
+            "HttpFetcherService",
+            database_url=generation_data_storage.database_url,
+            http_fetch_queue=discoverability_queue_service.http_fetch_queue,
+            raw_html_bucket=raw_html_storage.raw_html_bucket,
+            discoverable_topic=discoverability_queue_service.discoverable_events_topic,
+        )
+        spa_fetcher_service = SpaFetcherService(
+            self,
+            "SpaFetcherService",
+            vpc=generation_data_storage.vpc,
+            database_security_group=generation_data_storage.database_security_group,
+            region_name=self.region,
+            database_url=generation_data_storage.database_url,
+            spa_fetch_queue=discoverability_queue_service.spa_fetch_queue,
+            raw_html_bucket=raw_html_storage.raw_html_bucket,
+            discoverable_topic=discoverability_queue_service.discoverable_events_topic,
         )
 
         CfnOutput(
@@ -72,9 +96,9 @@ class LlmTxtGeneratorStack(Stack):
         )
         CfnOutput(
             self,
-            "PlaywrightFetchQueueUrl",
-            value=discoverability_queue_service.playwright_fetch_queue.queue_url,
-            description="Playwright fetch destination queue URL",
+            "SpaFetchQueueUrl",
+            value=discoverability_queue_service.spa_fetch_queue.queue_url,
+            description="SPA fetch destination queue URL",
         )
         CfnOutput(
             self,
@@ -84,9 +108,51 @@ class LlmTxtGeneratorStack(Stack):
         )
         CfnOutput(
             self,
+            "ProcessingTopicArn",
+            value=discoverability_queue_service.processing_events_topic.topic_arn,
+            description="Processing SNS topic ARN",
+        )
+        CfnOutput(
+            self,
+            "ProcessingQueueUrl",
+            value=discoverability_queue_service.processing_queue.queue_url,
+            description="Processing queue URL for downstream consumers",
+        )
+        CfnOutput(
+            self,
+            "ProcessingDeadLetterQueueArn",
+            value=discoverability_queue_service.processing_dead_letter_queue.queue_arn,
+            description="Processing DLQ ARN for dead-letter inspections",
+        )
+        CfnOutput(
+            self,
+            "RawHtmlBucketName",
+            value=raw_html_storage.raw_html_bucket.bucket_name,
+            description="Raw HTML artifact bucket name",
+        )
+        CfnOutput(
+            self,
+            "RawHtmlBucketArn",
+            value=raw_html_storage.raw_html_bucket.bucket_arn,
+            description="Raw HTML artifact bucket ARN",
+        )
+        CfnOutput(
+            self,
             "OrchestratorServiceArn",
             value=orchestrator_service.service.service_arn,
             description="ECS service ARN for orchestrator worker",
+        )
+        CfnOutput(
+            self,
+            "HttpFetcherFunctionName",
+            value=http_fetcher_service.function.function_name,
+            description="Lambda function name for HTTP fetch consumer",
+        )
+        CfnOutput(
+            self,
+            "SpaFetcherServiceArn",
+            value=spa_fetcher_service.service.service_arn,
+            description="ECS service ARN for SPA fetch worker",
         )
         CfnOutput(
             self,
