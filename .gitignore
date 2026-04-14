@@ -40,3 +40,4 @@ docker-compose.override.yml
 
 # CDK output artifacts
 infra/cdk.out/
+infra/cdk.context.json
