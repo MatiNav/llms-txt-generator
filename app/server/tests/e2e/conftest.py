@@ -4,7 +4,7 @@ import types
 import pytest
 from sqlalchemy import text
 
-from server.dependencies import get_sqs_client
+from server.dependencies import get_sns_client
 from server.main import app
 from shared.db.engine import get_engine
 from shared.db.session import get_session_factory
@@ -44,11 +44,13 @@ async def reset_cached_db_state() -> None:
 
 @pytest.fixture
 def mock_sqs_dependency() -> None:
-    async def fake_send_message(payload, request_id=None):
+    async def fake_publish_message(
+        topic_arn, payload, request_id=None, message_attributes=None
+    ):
         return "mock-message-id"
 
-    app.dependency_overrides[get_sqs_client] = lambda: types.SimpleNamespace(
-        send_message=fake_send_message
+    app.dependency_overrides[get_sns_client] = lambda: types.SimpleNamespace(
+        publish_message=fake_publish_message
     )
     yield
-    app.dependency_overrides.pop(get_sqs_client, None)
+    app.dependency_overrides.pop(get_sns_client, None)

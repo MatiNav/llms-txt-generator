@@ -6,7 +6,7 @@ from functools import lru_cache
 @dataclass(frozen=True)
 class ServerSettings:
     aws_region: str
-    discoverable_queue_url: str
+    discoverable_topic_arn: str
 
 
 def _required_env_value(key: str) -> str:
@@ -20,5 +20,5 @@ def _required_env_value(key: str) -> str:
 def get_server_settings() -> ServerSettings:
     return ServerSettings(
         aws_region=_required_env_value("AWS_REGION"),
-        discoverable_queue_url=_required_env_value("DISCOVERABLE_QUEUE_URL"),
+        discoverable_topic_arn=_required_env_value("DISCOVERABLE_TOPIC_ARN"),
     )
