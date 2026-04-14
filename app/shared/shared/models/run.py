@@ -19,6 +19,7 @@ from shared.constants.run_state import (
     RUN_STATE_FAILED,
     RUN_STATE_PROCESSING,
 )
+from shared.constants.run_limits import DEFAULT_MAX_PAGES_PER_RUN
 from shared.constants.trigger_reason import (
     TRIGGER_REASON_CRON,
     TRIGGER_REASON_ON_DEMAND,
@@ -53,7 +54,7 @@ class Run(Base):
     max_pages: Mapped[int] = mapped_column(
         Integer,
         nullable=False,
-        default=200,
+        default=DEFAULT_MAX_PAGES_PER_RUN,
     )
 
     # When pages_completed == pages_queued → trigger processing pipeline.

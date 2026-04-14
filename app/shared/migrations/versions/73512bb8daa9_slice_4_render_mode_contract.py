@@ -28,7 +28,9 @@ def upgrade() -> None:
         "run_pages",
         "render_mode IN ('http', 'spa')",
     )
-    op.drop_constraint("ck_run_pages_valid_fetch_status", "run_pages", type_="check")
+    op.execute(
+        "ALTER TABLE run_pages DROP CONSTRAINT IF EXISTS ck_run_pages_valid_fetch_status"
+    )
     op.add_column(
         "run_pages", sa.Column("fetch_started_at", sa.DateTime(), nullable=True)
     )

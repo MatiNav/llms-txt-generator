@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from server.repositories.generation_types import InflightRunSnapshot
 from shared.constants.page_status import FETCH_STATUS_QUEUED, PAGE_STATUS_NEW
+from shared.constants.run_limits import DEFAULT_MAX_PAGES_PER_RUN
 from shared.constants.render_mode import RenderModeValue
 from shared.constants.run_state import INFLIGHT_RUN_STATES, RUN_STATE_DISCOVERING
 from shared.constants.trigger_reason import TRIGGER_REASON_ON_DEMAND
@@ -51,6 +52,7 @@ class GenerationRepository:
             site_id=site_id,
             trigger_reason=TRIGGER_REASON_ON_DEMAND,
             state=RUN_STATE_DISCOVERING,
+            max_pages=DEFAULT_MAX_PAGES_PER_RUN,
         )
         self.database_session.add(created_run)
 

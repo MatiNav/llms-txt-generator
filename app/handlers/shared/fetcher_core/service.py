@@ -71,6 +71,9 @@ class FetcherCoreService:
     async def _claim_or_skip(self, *, run_id: str, page_id: str) -> bool:
         was_claimed = await self.repository.claim_page(page_id)
         if was_claimed:
+            # Persist claim before fetch work starts so failure rollback
+            # does not revert the row back to QUEUED.
+            await self.repository.database_session.commit()
             return True
 
         log_event(

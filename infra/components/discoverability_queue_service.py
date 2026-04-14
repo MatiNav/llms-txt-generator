@@ -67,6 +67,25 @@ class DiscoverabilityQueueService(Construct):
             ),
         )
 
+        processing_dead_letter_queue = sqs.Queue(
+            self,
+            "ProcessingDeadLetterQueue",
+            queue_name="llmstxt-processing-dlq",
+            retention_period=Duration.days(14),
+        )
+
+        processing_queue = sqs.Queue(
+            self,
+            "ProcessingQueue",
+            queue_name="llmstxt-processing",
+            visibility_timeout=Duration.seconds(120),
+            receive_message_wait_time=Duration.seconds(20),
+            dead_letter_queue=sqs.DeadLetterQueue(
+                queue=processing_dead_letter_queue,
+                max_receive_count=5,
+            ),
+        )
+
         discoverable_events_topic = sns.Topic(
             self,
             "DiscoverableEventsTopic",
@@ -111,6 +130,12 @@ class DiscoverabilityQueueService(Construct):
                 },
             )
         )
+        processing_events_topic.add_subscription(
+            sns_subscriptions.SqsSubscription(
+                processing_queue,
+                raw_message_delivery=True,
+            )
+        )
 
         server_runtime_role = iam.Role(
             self,
@@ -126,6 +151,8 @@ class DiscoverabilityQueueService(Construct):
         self.http_fetch_queue = http_fetch_queue
         self.spa_fetch_dead_letter_queue = spa_fetch_dead_letter_queue
         self.spa_fetch_queue = spa_fetch_queue
+        self.processing_dead_letter_queue = processing_dead_letter_queue
+        self.processing_queue = processing_queue
         self.discoverable_events_topic = discoverable_events_topic
         self.fetch_events_topic = fetch_events_topic
         self.processing_events_topic = processing_events_topic

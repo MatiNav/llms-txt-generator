@@ -50,10 +50,10 @@ async def main_async() -> None:
             if not raw_messages:
                 continue
 
-            message_tasks = [
-                process_raw_message(message, runtime) for message in raw_messages
-            ]
-            await asyncio.gather(*message_tasks)
+            # The runtime currently holds a shared SQLAlchemy AsyncSession.
+            # Processing messages concurrently causes session state conflicts.
+            for message in raw_messages:
+                await process_raw_message(message, runtime)
     except Exception as runtime_error:
         log_event(
             logger,
