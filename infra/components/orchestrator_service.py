@@ -24,6 +24,7 @@ class OrchestratorService(Construct):
         database_url: str,
         discoverable_queue: sqs.IQueue,
         fetch_events_topic: sns.ITopic,
+        processing_events_topic: sns.ITopic,
     ) -> None:
         super().__init__(scope, construct_id)
 
@@ -63,6 +64,7 @@ class OrchestratorService(Construct):
                 "DATABASE_URL": database_url,
                 "DISCOVERABLE_QUEUE_URL": discoverable_queue.queue_url,
                 "FETCH_TOPIC_ARN": fetch_events_topic.topic_arn,
+                "PROCESSING_TOPIC_ARN": processing_events_topic.topic_arn,
             },
         )
 
@@ -70,6 +72,7 @@ class OrchestratorService(Construct):
             orchestrator_task_definition.task_role
         )
         fetch_events_topic.grant_publish(orchestrator_task_definition.task_role)
+        processing_events_topic.grant_publish(orchestrator_task_definition.task_role)
 
         orchestrator_security_group = ec2.SecurityGroup(
             self,

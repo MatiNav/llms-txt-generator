@@ -32,6 +32,7 @@ class LlmTxtGeneratorStack(Stack):
             database_url=generation_data_storage.database_url,
             discoverable_queue=discoverability_queue_service.discoverable_queue,
             fetch_events_topic=discoverability_queue_service.fetch_events_topic,
+            processing_events_topic=discoverability_queue_service.processing_events_topic,
         )
 
         CfnOutput(
@@ -72,15 +73,21 @@ class LlmTxtGeneratorStack(Stack):
         )
         CfnOutput(
             self,
-            "PlaywrightFetchQueueUrl",
-            value=discoverability_queue_service.playwright_fetch_queue.queue_url,
-            description="Playwright fetch destination queue URL",
+            "SpaFetchQueueUrl",
+            value=discoverability_queue_service.spa_fetch_queue.queue_url,
+            description="SPA fetch destination queue URL",
         )
         CfnOutput(
             self,
             "FetchTopicArn",
             value=discoverability_queue_service.fetch_events_topic.topic_arn,
             description="Fetch SNS topic ARN",
+        )
+        CfnOutput(
+            self,
+            "ProcessingTopicArn",
+            value=discoverability_queue_service.processing_events_topic.topic_arn,
+            description="Processing SNS topic ARN",
         )
         CfnOutput(
             self,
