@@ -16,7 +16,7 @@ class GenerationDataStorage(Construct):
         service_vpc = ec2.Vpc(
             self,
             "ServiceVpc",
-            max_azs=2,
+            availability_zones=["us-east-1a", "us-east-1b"],
             nat_gateways=0,
             subnet_configuration=[
                 ec2.SubnetConfiguration(
@@ -84,6 +84,8 @@ class GenerationDataStorage(Construct):
             f"{database_instance.db_instance_endpoint_address}:"
             f"{database_instance.db_instance_endpoint_port}/{database_name}"
         )
+        self.vpc = service_vpc
+        self.database_security_group = database_security_group
         self.database_instance = database_instance
         self.database_secret = database_secret
         self.database_name = database_name
