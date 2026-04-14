@@ -4,6 +4,7 @@ from constructs import Construct
 from components.discoverability_queue_service import DiscoverabilityQueueService
 from components.generate_api_service import GenerateApiService
 from components.generation_data_storage import GenerationDataStorage
+from components.orchestrator_service import OrchestratorService
 
 
 class LlmTxtGeneratorStack(Stack):
@@ -17,10 +18,20 @@ class LlmTxtGeneratorStack(Stack):
         generate_api_service = GenerateApiService(
             self,
             "GenerateApiService",
-            discoverable_queue_url=discoverability_queue_service.discoverable_queue.queue_url,
+            discoverable_topic_arn=discoverability_queue_service.discoverable_events_topic.topic_arn,
             database_url=generation_data_storage.database_url,
             server_runtime_role_arn=discoverability_queue_service.server_runtime_role.role_arn,
             region_name=self.region,
+        )
+        orchestrator_service = OrchestratorService(
+            self,
+            "OrchestratorService",
+            vpc=generation_data_storage.vpc,
+            database_security_group=generation_data_storage.database_security_group,
+            region_name=self.region,
+            database_url=generation_data_storage.database_url,
+            discoverable_queue=discoverability_queue_service.discoverable_queue,
+            fetch_events_topic=discoverability_queue_service.fetch_events_topic,
         )
 
         CfnOutput(
@@ -33,7 +44,7 @@ class LlmTxtGeneratorStack(Stack):
             self,
             "DiscoverableQueueUrl",
             value=discoverability_queue_service.discoverable_queue.queue_url,
-            description="Set as DISCOVERABLE_QUEUE_URL in server runtime env",
+            description="Discoverable queue URL for orchestrator consumer runtime",
         )
         CfnOutput(
             self,
@@ -43,9 +54,39 @@ class LlmTxtGeneratorStack(Stack):
         )
         CfnOutput(
             self,
+            "DiscoverableTopicArn",
+            value=discoverability_queue_service.discoverable_events_topic.topic_arn,
+            description="Discoverable SNS topic ARN",
+        )
+        CfnOutput(
+            self,
             "DiscoverableDeadLetterQueueArn",
             value=discoverability_queue_service.discoverable_dead_letter_queue.queue_arn,
             description="DLQ ARN for alarms and dead-letter inspections",
+        )
+        CfnOutput(
+            self,
+            "HttpFetchQueueUrl",
+            value=discoverability_queue_service.http_fetch_queue.queue_url,
+            description="HTTP fetch destination queue URL",
+        )
+        CfnOutput(
+            self,
+            "PlaywrightFetchQueueUrl",
+            value=discoverability_queue_service.playwright_fetch_queue.queue_url,
+            description="Playwright fetch destination queue URL",
+        )
+        CfnOutput(
+            self,
+            "FetchTopicArn",
+            value=discoverability_queue_service.fetch_events_topic.topic_arn,
+            description="Fetch SNS topic ARN",
+        )
+        CfnOutput(
+            self,
+            "OrchestratorServiceArn",
+            value=orchestrator_service.service.service_arn,
+            description="ECS service ARN for orchestrator worker",
         )
         CfnOutput(
             self,
