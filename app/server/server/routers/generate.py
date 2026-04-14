@@ -5,8 +5,8 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from server.dependencies import get_generation_service
 from server.schemas.generate import GenerateRequest, GenerateResponse
 from server.services.generation_service import GenerationService
-from server.utils.url import extract_host_for_logging
 from shared.logging import log_event
+from shared.pipeline.url_norm import extract_host
 
 
 logger = logging.getLogger(__name__)
@@ -20,7 +20,7 @@ async def generate(
     generation_service: GenerationService = Depends(get_generation_service),
 ) -> GenerateResponse:
     request_id = getattr(request.state, "request_id", None)
-    url_host = extract_host_for_logging(payload.url)
+    url_host = extract_host(payload.url)
 
     log_event(
         logger,
