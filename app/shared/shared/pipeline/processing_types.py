@@ -43,9 +43,35 @@ class SectionDocumentIR:
 
 
 @dataclass(frozen=True)
+class OptionalCandidate:
+    url: str
+    anchor_text: str | None
+    source_url: str
+    source_kind: str
+    raw_context: str | None
+
+
+@dataclass(frozen=True)
+class OptionalDecision:
+    category: str
+    score: int
+    reason: str
+
+
+@dataclass(frozen=True)
+class OptionalEntry:
+    title: str
+    url: str
+    description: str
+
+
+@dataclass(frozen=True)
 class RootDocumentIR:
+    root_title: str
     root_summary_placeholder: str
+    root_details_placeholder: str
     sections: list[SectionDocumentIR]
+    optional_entries: list[OptionalEntry]
 
 
 @dataclass(frozen=True)

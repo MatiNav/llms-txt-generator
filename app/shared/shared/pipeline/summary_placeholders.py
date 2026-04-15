@@ -8,6 +8,10 @@ def root_summary_placeholder() -> str:
     return "{{LLM_SUMMARY:root}}"
 
 
+def root_details_placeholder() -> str:
+    return "{{LLM_SUMMARY:root:details}}"
+
+
 def section_summary_placeholder(section_key: str) -> str:
     return f"{{{{LLM_SUMMARY:section:{section_key}}}}}"
 
