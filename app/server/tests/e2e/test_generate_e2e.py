@@ -41,7 +41,7 @@ async def test_generate_coalesces_concurrent_requests(
                 SELECT
                     (SELECT COUNT(*) FROM sites) AS sites_count,
                     (SELECT COUNT(*) FROM runs) AS runs_count,
-                    (SELECT COUNT(*) FROM runs WHERE state IN ('discovering','processing')) AS inflight_count
+                    (SELECT COUNT(*) FROM runs WHERE state IN ('discovering','processing','ready_for_llm_generation')) AS inflight_count
                 """
             )
         )

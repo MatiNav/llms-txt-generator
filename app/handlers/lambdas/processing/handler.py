@@ -6,6 +6,7 @@ from typing import Any
 from handlers.lambdas.processing.runtime import build_processing_runtime
 from shared.db.engine import get_engine
 from shared.db.session import get_session_factory
+from shared.constants.run_state import RUN_STATE_READY_FOR_LLM_GENERATION
 from shared.logging import configure_json_logging, log_decision, log_event
 from shared.pipeline.llm_generation_message import (
     build_llm_generation_requested_message,
@@ -56,8 +57,29 @@ async def _process_record(record: dict[str, Any], runtime) -> None:
             site_id=site_id,
             message_id=message_id,
         )
+        await _republish_if_run_is_ready_for_llm_generation(
+            runtime=runtime,
+            run_id=run_id,
+            site_id=site_id,
+            message_id=message_id,
+        )
         return
 
+    await _publish_llm_generation_message(
+        runtime=runtime,
+        run_id=run_id,
+        site_id=site_id,
+        message_id=message_id,
+    )
+
+
+async def _publish_llm_generation_message(
+    *,
+    runtime,
+    run_id: str,
+    site_id: str,
+    message_id: str,
+) -> None:
     llm_generation_payload = build_llm_generation_requested_message(
         run_id=run_id,
         site_id=site_id,
@@ -73,6 +95,36 @@ async def _process_record(record: dict[str, Any], runtime) -> None:
         message_id=message_id,
         run_id=run_id,
         site_id=site_id,
+    )
+
+
+async def _republish_if_run_is_ready_for_llm_generation(
+    *,
+    runtime,
+    run_id: str,
+    site_id: str,
+    message_id: str,
+) -> None:
+    run_snapshot = await runtime.processing_service.repository.get_run_snapshot(run_id)
+    if run_snapshot is None:
+        return
+
+    if run_snapshot.state != RUN_STATE_READY_FOR_LLM_GENERATION:
+        return
+
+    log_decision(
+        logger,
+        decision_name="processing.republish_llm_generation_after_commit",
+        reason="run already committed to ready_for_llm_generation in earlier attempt",
+        run_id=run_id,
+        site_id=site_id,
+        message_id=message_id,
+    )
+    await _publish_llm_generation_message(
+        runtime=runtime,
+        run_id=run_id,
+        site_id=site_id,
+        message_id=message_id,
     )
 
 

@@ -19,6 +19,7 @@ from shared.constants.run_state import (
     RUN_STATE_DISCOVERING,
     RUN_STATE_FAILED,
     RUN_STATE_PROCESSING,
+    RUN_STATE_READY_FOR_LLM_GENERATION,
 )
 from shared.constants.sns_attributes import (
     SNS_ATTRIBUTE_RENDER_MODE,
@@ -35,6 +36,7 @@ __all__ = [
     "RENDER_MODE_SPA",
     "RUN_STATE_DISCOVERING",
     "RUN_STATE_PROCESSING",
+    "RUN_STATE_READY_FOR_LLM_GENERATION",
     "RUN_STATE_COMPLETED",
     "RUN_STATE_FAILED",
     "INFLIGHT_RUN_STATES",

@@ -12,6 +12,7 @@ from shared.constants.run_state import (
     RUN_STATE_COMPLETED,
     RUN_STATE_FAILED,
     RUN_STATE_PROCESSING,
+    RUN_STATE_READY_FOR_LLM_GENERATION,
 )
 from shared.models import Run, RunPage
 from shared.pipeline.processing_types import PageForProcessing
@@ -138,7 +139,7 @@ class ProcessingRepository:
         failed_result = await self.database_session.execute(failed_statement)
         return failed_result.first() is not None
 
-    async def mark_run_completed(
+    async def mark_run_ready_for_llm_generation(
         self,
         *,
         run_id: str,
@@ -147,21 +148,20 @@ class ProcessingRepository:
         bundle_key: str | None,
     ) -> bool:
         is_hierarchical = output_mode == "hierarchical"
-        complete_statement = (
+        ready_statement = (
             update(Run)
             .where(Run.id == run_id)
             .where(Run.state == RUN_STATE_PROCESSING)
             .values(
-                state=RUN_STATE_COMPLETED,
-                completed_at=func.now(),
+                state=RUN_STATE_READY_FOR_LLM_GENERATION,
                 llms_txt_s3_key=(None if is_hierarchical else root_key),
                 bundle_s3_key=(bundle_key if is_hierarchical else None),
                 error_message=None,
             )
             .returning(Run.id)
         )
-        complete_result = await self.database_session.execute(complete_statement)
-        return complete_result.first() is not None
+        ready_result = await self.database_session.execute(ready_statement)
+        return ready_result.first() is not None
 
     @staticmethod
     def is_terminal_state(run_state: str) -> bool:

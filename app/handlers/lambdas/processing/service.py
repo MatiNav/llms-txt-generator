@@ -11,7 +11,10 @@ from handlers.lambdas.processing.pipeline import (
     select_eligible_pages,
 )
 from handlers.lambdas.processing.repository import ProcessingRepository, RunSnapshot
-from shared.constants.run_state import RUN_STATE_PROCESSING
+from shared.constants.run_state import (
+    RUN_STATE_PROCESSING,
+    RUN_STATE_READY_FOR_LLM_GENERATION,
+)
 from shared.logging import log_decision, log_event
 from shared.pipeline.processing_types import (
     PageForProcessing,
@@ -101,7 +104,7 @@ class ProcessingService:
             run_id=run_id,
             output_mode=rendered_output_bundle.output_mode,
         )
-        await self._finalize_completed_run(
+        await self._finalize_ready_run(
             run_id=run_id,
             site_id=site_id,
             output_mode=rendered_output_bundle.output_mode,
@@ -153,6 +156,19 @@ class ProcessingService:
             )
 
         if run_snapshot.state != RUN_STATE_PROCESSING:
+            if run_snapshot.state == RUN_STATE_READY_FOR_LLM_GENERATION:
+                log_decision(
+                    logger,
+                    decision_name="processing.skipped_already_ready_for_llm_generation",
+                    reason="run already transitioned to ready_for_llm_generation",
+                    run_state=run_snapshot.state,
+                    **decision_context,
+                )
+                return True, self._failed_result(
+                    run_id=run_snapshot.run_id,
+                    site_id=site_id,
+                )
+
             log_decision(
                 logger,
                 decision_name="processing.rejected_invalid_run_state",
@@ -269,7 +285,7 @@ class ProcessingService:
             return None
         return self.artifact_storage.generated_bundle_prefix(run_id)
 
-    async def _finalize_completed_run(
+    async def _finalize_ready_run(
         self,
         *,
         run_id: str,
@@ -279,19 +295,19 @@ class ProcessingService:
         bundle_key: str | None,
         rendered_file_count: int,
     ) -> None:
-        run_completed = await self.repository.mark_run_completed(
+        run_marked_ready = await self.repository.mark_run_ready_for_llm_generation(
             run_id=run_id,
             output_mode=output_mode,
             root_key=root_key,
             bundle_key=bundle_key,
         )
-        if not run_completed:
-            raise RuntimeError("Run completion transition rejected")
+        if not run_marked_ready:
+            raise RuntimeError("Run ready_for_llm_generation transition rejected")
 
         log_event(
             logger,
             logging.INFO,
-            "processing.run.completed",
+            "processing.run.ready_for_llm_generation",
             run_id=run_id,
             site_id=site_id,
             output_mode=output_mode,
