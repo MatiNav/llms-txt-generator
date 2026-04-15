@@ -18,6 +18,7 @@ from shared.constants.run_state import (
     RUN_STATE_DISCOVERING,
     RUN_STATE_FAILED,
     RUN_STATE_PROCESSING,
+    RUN_STATE_READY_FOR_LLM_GENERATION,
 )
 from shared.constants.run_limits import DEFAULT_MAX_PAGES_PER_RUN
 from shared.constants.trigger_reason import (
@@ -111,7 +112,7 @@ class Run(Base):
             name="valid_trigger_reason",
         ),
         CheckConstraint(
-            f"state IN ('{RUN_STATE_DISCOVERING}', '{RUN_STATE_PROCESSING}', '{RUN_STATE_COMPLETED}', '{RUN_STATE_FAILED}')",
+            f"state IN ('{RUN_STATE_DISCOVERING}', '{RUN_STATE_PROCESSING}', '{RUN_STATE_READY_FOR_LLM_GENERATION}', '{RUN_STATE_COMPLETED}', '{RUN_STATE_FAILED}')",
             name="valid_state",
         ),
         # Prevent duplicate in-flight runs for the same site
@@ -120,7 +121,7 @@ class Run(Base):
             "site_id",
             unique=True,
             postgresql_where=text(
-                f"state IN ('{RUN_STATE_DISCOVERING}', '{RUN_STATE_PROCESSING}')"
+                f"state IN ('{RUN_STATE_DISCOVERING}', '{RUN_STATE_PROCESSING}', '{RUN_STATE_READY_FOR_LLM_GENERATION}')"
             ),
         ),
         Index("idx_runs_site_created", "site_id", "created_at"),

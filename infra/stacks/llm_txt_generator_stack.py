@@ -1,3 +1,5 @@
+import os
+
 from aws_cdk import CfnOutput, Stack
 from constructs import Construct
 
@@ -7,6 +9,7 @@ from components.generated_output_storage import GeneratedOutputStorage
 from components.generation_data_storage import GenerationDataStorage
 from components.http_fetcher_service import HttpFetcherService
 from components.llm_generation_queue_service import LlmGenerationQueueService
+from components.llm_generator_service import LlmGeneratorService
 from components.orchestrator_service import OrchestratorService
 from components.processing_service import ProcessingService
 from components.raw_html_storage import RawHtmlStorage
@@ -27,6 +30,11 @@ class LlmTxtGeneratorStack(Stack):
         llm_generation_queue_service = LlmGenerationQueueService(
             self, "LlmGenerationQueueService"
         )
+        openai_api_key = os.getenv("OPENAI_API_KEY")
+        if not openai_api_key:
+            raise RuntimeError("OPENAI_API_KEY environment variable is required")
+        openai_model_name = os.getenv("OPENAI_MODEL_NAME", "gpt-4.1-mini")
+
         generation_data_storage = GenerationDataStorage(self, "GenerationDataStorage")
         generate_api_service = GenerateApiService(
             self,
@@ -74,6 +82,15 @@ class LlmTxtGeneratorStack(Stack):
             raw_html_bucket=raw_html_storage.raw_html_bucket,
             generated_output_bucket=generated_output_storage.generated_output_bucket,
             llm_generation_topic=llm_generation_queue_service.llm_generation_events_topic,
+        )
+        llm_generator_service = LlmGeneratorService(
+            self,
+            "LlmGeneratorService",
+            database_url=generation_data_storage.database_url,
+            llm_generation_queue=llm_generation_queue_service.llm_generation_queue,
+            generated_output_bucket=generated_output_storage.generated_output_bucket,
+            openai_api_key=openai_api_key,
+            openai_model_name=openai_model_name,
         )
 
         CfnOutput(
@@ -201,6 +218,12 @@ class LlmTxtGeneratorStack(Stack):
             "ProcessingFunctionName",
             value=processing_service.function.function_name,
             description="Lambda function name for processing consumer",
+        )
+        CfnOutput(
+            self,
+            "LlmGeneratorFunctionName",
+            value=llm_generator_service.function.function_name,
+            description="Lambda function name for llm generation consumer",
         )
         CfnOutput(
             self,
