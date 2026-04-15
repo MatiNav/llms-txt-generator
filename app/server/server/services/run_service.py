@@ -47,8 +47,6 @@ class RunService:
             pages_detected=snapshot.pages_detected,
             pages_queued=snapshot.pages_queued,
             pages_completed=snapshot.pages_completed,
-            has_llms_txt=snapshot.llms_txt_s3_key is not None,
-            has_bundle_zip=snapshot.bundle_s3_key is not None,
             error_message=snapshot.error_message,
             updated_at=snapshot.updated_at,
         )

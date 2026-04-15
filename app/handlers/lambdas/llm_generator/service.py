@@ -53,17 +53,16 @@ class LlmGeneratorService:
             if not generated_keys:
                 raise FatalLlmError("No generated artifacts found for llm generation")
 
-            if (
-                run_context.llms_txt_s3_key is None
-                and run_context.bundle_s3_key is None
-            ):
-                raise FatalLlmError("Run has no output pointers for llm generation")
-
             page_context_by_url = await self.repository.get_page_context_by_url(run_id)
             replacement_count = await self._enrich_generated_files(
                 run_id=run_id,
                 generated_keys=generated_keys,
                 page_context_by_url=page_context_by_url,
+            )
+
+            bundle_key = await self.artifact_storage.write_bundle_zip(
+                run_id=run_id,
+                generated_keys=generated_keys,
             )
 
             run_completed = await self.repository.mark_run_completed(run_id)
@@ -80,6 +79,7 @@ class LlmGeneratorService:
                 site_id=site_id,
                 generated_file_count=len(generated_keys),
                 replacement_count=replacement_count,
+                bundle_key=bundle_key,
             )
         except RetriableLlmError:
             raise

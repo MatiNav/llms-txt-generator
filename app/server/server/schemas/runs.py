@@ -13,7 +13,5 @@ class RunStatusResponse(BaseModel):
     pages_detected: int
     pages_queued: int
     pages_completed: int
-    has_llms_txt: bool
-    has_bundle_zip: bool
     error_message: str | None
     updated_at: datetime

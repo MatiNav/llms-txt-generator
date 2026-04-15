@@ -50,8 +50,6 @@ class RunEventsService:
                 "pages_detected": run_status.pages_detected,
                 "pages_queued": run_status.pages_queued,
                 "pages_completed": run_status.pages_completed,
-                "has_llms_txt": run_status.has_llms_txt,
-                "has_bundle_zip": run_status.has_bundle_zip,
                 "error_message": run_status.error_message,
             }
             current_fingerprint = json.dumps(stable_fingerprint_payload, sort_keys=True)

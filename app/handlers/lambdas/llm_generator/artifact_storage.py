@@ -1,5 +1,9 @@
+import io
+import zipfile
+
 import aioboto3
 from botocore.exceptions import ClientError
+from shared.pipeline.artifact_keys import generated_bundle_key, generated_prefix
 
 
 class LlmGeneratorArtifactStorage:
@@ -9,7 +13,7 @@ class LlmGeneratorArtifactStorage:
         self.session = aioboto3.Session()
 
     async def list_generated_keys(self, run_id: str) -> list[str]:
-        prefix = self.generated_prefix(run_id)
+        prefix = generated_prefix(run_id)
         keys: list[str] = []
         async with self.session.client("s3", region_name=self.region_name) as s3_client:
             paginator = s3_client.get_paginator("list_objects_v2")
@@ -50,6 +54,36 @@ class LlmGeneratorArtifactStorage:
                 Metadata={"run_id": run_id, "enriched": "true"},
             )
 
-    @staticmethod
-    def generated_prefix(run_id: str) -> str:
-        return f"runs/{run_id}/generated/"
+    async def write_bundle_zip(self, *, run_id: str, generated_keys: list[str]) -> str:
+        bundle_key = generated_bundle_key(run_id)
+        generated_path_prefix = generated_prefix(run_id)
+
+        zip_buffer = io.BytesIO()
+        async with self.session.client("s3", region_name=self.region_name) as s3_client:
+            with zipfile.ZipFile(
+                zip_buffer,
+                mode="w",
+                compression=zipfile.ZIP_DEFLATED,
+            ) as archive_file:
+                for generated_key in sorted(generated_keys):
+                    if not generated_key.endswith(".txt"):
+                        continue
+
+                    response = await s3_client.get_object(
+                        Bucket=self.generated_output_bucket_name,
+                        Key=generated_key,
+                    )
+                    body_bytes = await response["Body"].read()
+                    archive_path = generated_key.removeprefix(generated_path_prefix)
+                    archive_file.writestr(archive_path, body_bytes)
+
+            zip_buffer.seek(0)
+            await s3_client.put_object(
+                Bucket=self.generated_output_bucket_name,
+                Key=bundle_key,
+                Body=zip_buffer.getvalue(),
+                ContentType="application/zip",
+                Metadata={"run_id": run_id},
+            )
+
+        return bundle_key

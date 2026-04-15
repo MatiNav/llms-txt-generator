@@ -8,6 +8,7 @@ from handlers.lambdas.processing.pipeline import (
     group_pages_by_section,
     infer_output_mode,
     render_documents,
+    render_ctx_documents,
     select_eligible_pages,
 )
 from handlers.lambdas.processing.repository import ProcessingRepository, RunSnapshot
@@ -36,7 +37,6 @@ class ProcessingResult:
 @dataclass(frozen=True)
 class RenderedOutputBundle:
     rendered_files: list[RenderedFile]
-    output_mode: str
 
 
 class ProcessingService:
@@ -99,17 +99,12 @@ class ProcessingService:
             run_id=run_id,
             rendered_files=rendered_output_bundle.rendered_files,
         )
-        root_key = self._require_root_key(generated_keys)
-        bundle_key = self._bundle_key_for_mode(
-            run_id=run_id,
-            output_mode=rendered_output_bundle.output_mode,
-        )
+        self._require_generated_key(generated_keys, "llms.txt")
+        self._require_generated_key(generated_keys, "llms-ctx.txt")
+        self._require_generated_key(generated_keys, "llms-ctx-full.txt")
         await self._finalize_ready_run(
             run_id=run_id,
             site_id=site_id,
-            output_mode=rendered_output_bundle.output_mode,
-            root_key=root_key,
-            bundle_key=bundle_key,
             rendered_file_count=len(rendered_output_bundle.rendered_files),
         )
         return ProcessingResult(
@@ -249,13 +244,13 @@ class ProcessingService:
             root_document,
             decision_context=decision_context,
         )
-        output_mode = infer_output_mode(
+        rendered_files.extend(render_ctx_documents(root_document))
+        infer_output_mode(
             rendered_files,
             decision_context=decision_context,
         )
         return RenderedOutputBundle(
             rendered_files=rendered_files,
-            output_mode=output_mode,
         )
 
     async def _persist_rendered_outputs(
@@ -274,32 +269,25 @@ class ProcessingService:
             generated_keys[rendered_file.relative_path] = generated_key
         return generated_keys
 
-    def _require_root_key(self, generated_keys: dict[str, str]) -> str:
-        root_key = generated_keys.get("llms.txt")
-        if root_key is None:
-            raise RuntimeError("Rendered output must include root llms.txt")
-        return root_key
-
-    def _bundle_key_for_mode(self, *, run_id: str, output_mode: str) -> str | None:
-        if output_mode != "hierarchical":
-            return None
-        return self.artifact_storage.generated_bundle_prefix(run_id)
+    def _require_generated_key(
+        self, generated_keys: dict[str, str], relative_path: str
+    ) -> str:
+        generated_key = generated_keys.get(relative_path)
+        if generated_key is None:
+            raise RuntimeError(
+                f"Rendered output must include required file: {relative_path}"
+            )
+        return generated_key
 
     async def _finalize_ready_run(
         self,
         *,
         run_id: str,
         site_id: str,
-        output_mode: str,
-        root_key: str,
-        bundle_key: str | None,
         rendered_file_count: int,
     ) -> None:
         run_marked_ready = await self.repository.mark_run_ready_for_llm_generation(
             run_id=run_id,
-            output_mode=output_mode,
-            root_key=root_key,
-            bundle_key=bundle_key,
         )
         if not run_marked_ready:
             raise RuntimeError("Run ready_for_llm_generation transition rejected")
@@ -310,9 +298,6 @@ class ProcessingService:
             "processing.run.ready_for_llm_generation",
             run_id=run_id,
             site_id=site_id,
-            output_mode=output_mode,
-            root_key=root_key,
-            bundle_key=bundle_key,
             rendered_file_count=rendered_file_count,
         )
 
@@ -353,6 +338,9 @@ class ProcessingService:
                         "h1": processed_page.h1,
                         "breadcrumbs": processed_page.breadcrumbs,
                         "content_length": processed_page.content_length,
+                        "normalized_content_length": len(
+                            processed_page.normalized_content
+                        ),
                         "internal_links_count": len(processed_page.internal_links),
                         "external_links_count": len(processed_page.external_links),
                         "mailto_links_count": len(processed_page.mailto_links),
