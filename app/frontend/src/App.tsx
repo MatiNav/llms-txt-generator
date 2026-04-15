@@ -36,6 +36,19 @@ function formatCompletedReasonLabel(completedReason: string | null): string {
   return "Completed — artifacts regenerated";
 }
 
+function formatTimelineStageLabel(
+  timelineEventName: string,
+  stageName: string,
+  pagesCompleted: number,
+  pagesQueued: number
+): string {
+  if (timelineEventName === "run.fetch_progress") {
+    return `Fetching pages (${pagesCompleted}/${pagesQueued})`;
+  }
+
+  return formatStageLabel(stageName);
+}
+
 export function App() {
   const [targetUrl, setTargetUrl] = useState("");
   const [renderMode, setRenderMode] = useState<RenderMode>("http");
@@ -221,7 +234,12 @@ export function App() {
                   <li key={`${timelineEvent.timestamp}-${eventIndex}`}>
                     <span className="timeline-event-name">{timelineEvent.eventName}</span>
                     <span className="timeline-event-stage">
-                      {formatStageLabel(timelineEvent.payload.stage)}
+                      {formatTimelineStageLabel(
+                        timelineEvent.eventName,
+                        timelineEvent.payload.stage,
+                        timelineEvent.payload.pages_completed,
+                        timelineEvent.payload.pages_queued
+                      )}
                     </span>
                     <span className="timeline-event-time">{timelineEvent.timestamp}</span>
                   </li>

@@ -5,6 +5,8 @@ from uuid import UUID
 from sqlalchemy import Select, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from shared.constants.page_status import PAGE_STATUS_CHANGED, PAGE_STATUS_NEW
+from shared.constants.run_state import RUN_STATE_COMPLETED
 from shared.models.run import Run
 from shared.models.run_page import RunPage
 from shared.models.site import Site
@@ -121,3 +123,39 @@ class RunRepository:
             )
             for site_row in sites_rows
         ]
+
+    async def get_root_render_mode(self, run_id: UUID) -> str | None:
+        root_render_mode_statement = (
+            select(RunPage.render_mode)
+            .where(RunPage.run_id == run_id)
+            .where(RunPage.depth == 0)
+            .order_by(RunPage.updated_at.desc())
+            .limit(1)
+        )
+        root_render_mode_result = await self.database_session.execute(
+            root_render_mode_statement
+        )
+        root_render_mode = root_render_mode_result.scalar_one_or_none()
+        if root_render_mode is None:
+            return None
+        return str(root_render_mode)
+
+    async def find_latest_completed_source_run_id(
+        self,
+        *,
+        site_id: UUID,
+        render_mode: str,
+    ) -> UUID | None:
+        source_run_statement = (
+            select(Run.id)
+            .join(RunPage, RunPage.run_id == Run.id)
+            .where(Run.site_id == site_id)
+            .where(Run.state == RUN_STATE_COMPLETED)
+            .where(RunPage.depth == 0)
+            .where(RunPage.render_mode == render_mode)
+            .where(RunPage.page_status.in_([PAGE_STATUS_NEW, PAGE_STATUS_CHANGED]))
+            .order_by(Run.completed_at.desc().nullslast(), Run.created_at.desc())
+            .limit(1)
+        )
+        source_run_result = await self.database_session.execute(source_run_statement)
+        return source_run_result.scalar_one_or_none()

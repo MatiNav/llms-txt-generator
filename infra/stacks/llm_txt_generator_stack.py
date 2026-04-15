@@ -65,7 +65,7 @@ class LlmTxtGeneratorStack(Stack):
             region_name=self.region,
             frontend_origin=f"https://{domain_service.domain_names.frontend_domain_name}",
             generated_output_bucket_name=generated_output_storage.generated_output_bucket.bucket_name,
-            download_url_ttl_seconds=900,
+            download_url_ttl_seconds=60,
         )
         frontend_hosting_service = FrontendHostingService(
             self,

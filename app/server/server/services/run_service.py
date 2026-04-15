@@ -33,6 +33,20 @@ class RunService:
     async def get_run_snapshot(self, run_id: UUID) -> RunStatusSnapshot | None:
         return await self.run_repository.get_run_snapshot(run_id=run_id)
 
+    async def get_root_render_mode(self, run_id: UUID) -> str | None:
+        return await self.run_repository.get_root_render_mode(run_id=run_id)
+
+    async def find_latest_completed_source_run_id(
+        self,
+        *,
+        site_id: UUID,
+        render_mode: str,
+    ) -> UUID | None:
+        return await self.run_repository.find_latest_completed_source_run_id(
+            site_id=site_id,
+            render_mode=render_mode,
+        )
+
     async def get_run_status(self, run_id: UUID) -> RunStatusResponse | None:
         snapshot = await self.get_run_snapshot(run_id=run_id)
         if snapshot is None:

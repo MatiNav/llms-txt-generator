@@ -56,7 +56,7 @@ export function useRunLifecycle(activeRunId: string | null) {
     let pollingIntervalId: number | null = null;
     const eventSource = connectRunEvents(activeRunId);
 
-    function appendStatus(eventName: string, runStatus: RunStatusResponse): void {
+    function upsertStatus(eventName: string, runStatus: RunStatusResponse): void {
       const statusFingerprint = createStableFingerprint(runStatus);
       if (statusFingerprint === lastFingerprintRef.current) {
         return;
@@ -65,14 +65,41 @@ export function useRunLifecycle(activeRunId: string | null) {
       lastFingerprintRef.current = statusFingerprint;
       setCurrentRunStatus(runStatus);
       reachedTerminalStageRef.current = isTerminalStatus(runStatus);
-      setTimelineEvents((previousTimelineEvents) => [
-        ...previousTimelineEvents,
-        {
-          eventName,
+      setTimelineEvents((previousTimelineEvents) => {
+        if (eventName !== "run.fetch_progress") {
+          return [
+            ...previousTimelineEvents,
+            {
+              eventName,
+              timestamp: new Date().toISOString(),
+              payload: runStatus,
+            },
+          ];
+        }
+
+        const existingFetchTimelineIndex = previousTimelineEvents.findIndex(
+          (timelineEvent) => timelineEvent.eventName === "run.fetch_progress"
+        );
+
+        if (existingFetchTimelineIndex < 0) {
+          return [
+            ...previousTimelineEvents,
+            {
+              eventName,
+              timestamp: new Date().toISOString(),
+              payload: runStatus,
+            },
+          ];
+        }
+
+        const updatedTimelineEvents = [...previousTimelineEvents];
+        updatedTimelineEvents[existingFetchTimelineIndex] = {
+          ...updatedTimelineEvents[existingFetchTimelineIndex],
           timestamp: new Date().toISOString(),
           payload: runStatus,
-        },
-      ]);
+        };
+        return updatedTimelineEvents;
+      });
     }
 
     function handleTypedEvent(eventName: string) {
@@ -82,7 +109,7 @@ export function useRunLifecycle(activeRunId: string | null) {
         }
         try {
           const parsedPayload = JSON.parse(messageEvent.data) as RunStatusResponse;
-          appendStatus(eventName, parsedPayload);
+          upsertStatus(eventName, parsedPayload);
           if (isTerminalStatus(parsedPayload)) {
             eventSource.close();
           }
@@ -128,7 +155,7 @@ export function useRunLifecycle(activeRunId: string | null) {
         }
         try {
           const latestRunStatus = await fetchRunStatus(activeRunId);
-          appendStatus("run.polling", latestRunStatus);
+          upsertStatus("run.polling", latestRunStatus);
           if (isTerminalStatus(latestRunStatus) && pollingIntervalId !== null) {
             window.clearInterval(pollingIntervalId);
             pollingIntervalId = null;

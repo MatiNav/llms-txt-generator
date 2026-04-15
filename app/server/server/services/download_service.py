@@ -39,7 +39,20 @@ class DownloadService:
         if self.generated_output_bucket_name == "":
             raise RuntimeError("GENERATED_OUTPUT_BUCKET_NAME is not configured")
 
-        bundle_object_key = generated_bundle_key(str(run_snapshot.run_id))
+        root_render_mode = await self.run_service.get_root_render_mode(
+            run_id=run_snapshot.run_id
+        )
+        if root_render_mode is None:
+            raise RuntimeError("Root render_mode is missing for run")
+
+        source_run_id = await self.run_service.find_latest_completed_source_run_id(
+            site_id=run_snapshot.site_id,
+            render_mode=root_render_mode,
+        )
+        if source_run_id is None:
+            raise RuntimeError("No compatible source run available for download")
+
+        bundle_object_key = generated_bundle_key(str(source_run_id))
         bundle_zip_url = await self._sign_object(bundle_object_key)
         return RunDownloadsResponse(
             run_id=run_snapshot.run_id,
