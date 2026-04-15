@@ -2,7 +2,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import {
   connectRunEvents,
-  fetchRunStatus,
   RunStatusResponse,
 } from "../api/client";
 
@@ -13,6 +12,7 @@ export type TimelineEvent = {
 };
 
 const terminalStages = new Set(["completed", "failed"]);
+const sseRotationIntervalMs = 105_000; // app runner server closes it at 120
 
 function createStableFingerprint(runStatus: RunStatusResponse): string {
   return JSON.stringify({
@@ -52,9 +52,36 @@ export function useRunLifecycle(activeRunId: string | null) {
       return;
     }
 
+    const runId = activeRunId;
+
     let isDisposed = false;
-    let pollingIntervalId: number | null = null;
-    const eventSource = connectRunEvents(activeRunId);
+    let eventSource: EventSource | null = null;
+    let rotationIntervalId: number | null = null;
+    const eventNames = [
+      "run.discovering",
+      "run.fetch_progress",
+      "run.processing",
+      "run.llm_generation",
+      "run.completed",
+      "run.failed",
+    ];
+    let listeners: Array<{
+      eventName: string;
+      eventHandler: (messageEvent: MessageEvent<string>) => void;
+    }> = [];
+
+    function closeStream(): void {
+      if (eventSource === null) {
+        return;
+      }
+      listeners.forEach(({ eventName, eventHandler }) => {
+        eventSource?.removeEventListener(eventName, eventHandler);
+      });
+      listeners = [];
+      eventSource.onerror = null;
+      eventSource.close();
+      eventSource = null;
+    }
 
     function upsertStatus(eventName: string, runStatus: RunStatusResponse): void {
       const statusFingerprint = createStableFingerprint(runStatus);
@@ -111,7 +138,7 @@ export function useRunLifecycle(activeRunId: string | null) {
           const parsedPayload = JSON.parse(messageEvent.data) as RunStatusResponse;
           upsertStatus(eventName, parsedPayload);
           if (isTerminalStatus(parsedPayload)) {
-            eventSource.close();
+            closeStream();
           }
         } catch {
           setLifecycleError("Failed to parse event stream payload");
@@ -119,61 +146,47 @@ export function useRunLifecycle(activeRunId: string | null) {
       };
     }
 
-    const eventNames = [
-      "run.discovering",
-      "run.fetch_progress",
-      "run.processing",
-      "run.llm_generation",
-      "run.completed",
-      "run.failed",
-    ];
-    const listeners = eventNames.map((eventName) => {
-      const eventHandler = handleTypedEvent(eventName);
-      eventSource.addEventListener(eventName, eventHandler);
-      return { eventName, eventHandler };
-    });
+    function openStream(): void {
+      closeStream();
+      eventSource = connectRunEvents(runId);
+      listeners = eventNames.map((eventName) => {
+        const eventHandler = handleTypedEvent(eventName);
+        eventSource?.addEventListener(eventName, eventHandler);
+        return { eventName, eventHandler };
+      });
 
-    eventSource.onerror = () => {
+      eventSource.onerror = () => {
+        if (isDisposed) {
+          return;
+        }
+
+        if (reachedTerminalStageRef.current) {
+          closeStream();
+          return;
+        }
+
+        openStream();
+      };
+    }
+
+    openStream();
+
+    rotationIntervalId = window.setInterval(() => {
       if (isDisposed) {
         return;
       }
-
       if (reachedTerminalStageRef.current) {
-        eventSource.close();
         return;
       }
 
-      setSseDisconnected(true);
-      eventSource.close();
-      if (pollingIntervalId !== null) {
-        return;
-      }
-
-      pollingIntervalId = window.setInterval(async () => {
-        if (isDisposed || activeRunId === null) {
-          return;
-        }
-        try {
-          const latestRunStatus = await fetchRunStatus(activeRunId);
-          upsertStatus("run.polling", latestRunStatus);
-          if (isTerminalStatus(latestRunStatus) && pollingIntervalId !== null) {
-            window.clearInterval(pollingIntervalId);
-            pollingIntervalId = null;
-          }
-        } catch {
-          setLifecycleError("Failed to poll run status after stream disconnect");
-        }
-      }, 2000);
-    };
+      openStream();
+    }, sseRotationIntervalMs);
 
     return () => {
       isDisposed = true;
-      listeners.forEach(({ eventName, eventHandler }) => {
-        eventSource.removeEventListener(eventName, eventHandler);
-      });
-      eventSource.close();
-      if (pollingIntervalId !== null) {
-        window.clearInterval(pollingIntervalId);
+      closeStream();
+      if (rotationIntervalId !== null) {
+        window.clearInterval(rotationIntervalId);
       }
     };
   }, [activeRunId]);
