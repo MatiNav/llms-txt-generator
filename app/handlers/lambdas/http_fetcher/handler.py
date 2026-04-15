@@ -12,7 +12,7 @@ from shared.pipeline.fetch_message import parse_fetch_requested_message
 logger = logging.getLogger(__name__)
 
 
-def _process_record_body(raw_body: str, runtime) -> None:
+async def _process_record_body(raw_body: str, runtime) -> None:
     parsed_payload = json.loads(raw_body)
     if not isinstance(parsed_payload, dict):
         raise ValueError("SQS message body must be a JSON object")
@@ -21,26 +21,23 @@ def _process_record_body(raw_body: str, runtime) -> None:
     if fetch_message["render_mode"] != RENDER_MODE_HTTP:
         raise ValueError("HTTP fetcher received non-http render_mode message")
 
-    asyncio.run(
-        runtime.fetcher_core.process(
-            fetch_message=fetch_message,
-            fetcher_adapter=runtime.fetcher_adapter,
-        )
+    await runtime.fetcher_core.process(
+        fetch_message=fetch_message,
+        fetcher_adapter=runtime.fetcher_adapter,
     )
 
 
-def handler(event: dict[str, Any], context: Any) -> dict[str, list[dict[str, str]]]:
-    configure_json_logging()
+async def _process_batch(event: dict[str, Any]) -> dict[str, list[dict[str, str]]]:
     runtime = build_http_fetcher_runtime()
-
     batch_failures: list[dict[str, str]] = []
+
     try:
         records = event.get("Records", [])
         for record in records:
             message_id = str(record.get("messageId", ""))
             raw_body = str(record.get("body", "{}"))
             try:
-                _process_record_body(raw_body, runtime)
+                await _process_record_body(raw_body, runtime)
             except Exception as processing_error:
                 log_event(
                     logger,
@@ -53,6 +50,11 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, list[dict[str, str
                 )
                 batch_failures.append({"itemIdentifier": message_id})
     finally:
-        asyncio.run(runtime.fetcher_core.repository.database_session.close())
+        await runtime.fetcher_core.repository.database_session.close()
 
     return {"batchItemFailures": batch_failures}
+
+
+def handler(event: dict[str, Any], context: Any) -> dict[str, list[dict[str, str]]]:
+    configure_json_logging()
+    return asyncio.run(_process_batch(event))

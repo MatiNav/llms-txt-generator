@@ -40,3 +40,21 @@ def log_event(
         event_name,
         extra={"event_fields": {"event_name": event_name, **fields}},
     )
+
+
+def log_decision(
+    logger: logging.Logger,
+    *,
+    decision_name: str,
+    reason: str,
+    level: int = logging.INFO,
+    **fields: Any,
+) -> None:
+    log_event(
+        logger,
+        level,
+        "decision.made",
+        decision_name=decision_name,
+        reason=reason,
+        **fields,
+    )
