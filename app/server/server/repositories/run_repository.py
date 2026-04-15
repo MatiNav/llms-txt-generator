@@ -20,8 +20,6 @@ class RunStatusSnapshot:
     pages_completed: int
     pages_detected: int
     root_fetch_status: str | None
-    llms_txt_s3_key: str | None
-    bundle_s3_key: str | None
     error_message: str | None
     updated_at: datetime
 
@@ -70,8 +68,6 @@ class RunRepository:
                 Run.pages_completed,
                 detected_count_subquery,
                 root_fetch_status_subquery,
-                Run.llms_txt_s3_key,
-                Run.bundle_s3_key,
                 Run.error_message,
                 Run.updated_at,
             )
@@ -96,10 +92,8 @@ class RunRepository:
             pages_completed=snapshot_row[5],
             pages_detected=snapshot_row[6],
             root_fetch_status=snapshot_row[7],
-            llms_txt_s3_key=snapshot_row[8],
-            bundle_s3_key=snapshot_row[9],
-            error_message=snapshot_row[10],
-            updated_at=snapshot_row[11],
+            error_message=snapshot_row[8],
+            updated_at=snapshot_row[9],
         )
 
     async def list_sites(

@@ -16,8 +16,6 @@ class LlmGenerationRunContext:
     run_id: str
     site_id: str
     state: str
-    llms_txt_s3_key: str | None
-    bundle_s3_key: str | None
 
 
 @dataclass(frozen=True)
@@ -36,11 +34,7 @@ class LlmGeneratorRepository:
 
     async def get_run_context(self, run_id: str) -> LlmGenerationRunContext | None:
         statement = (
-            select(
-                Run.id, Run.site_id, Run.state, Run.llms_txt_s3_key, Run.bundle_s3_key
-            )
-            .where(Run.id == run_id)
-            .limit(1)
+            select(Run.id, Run.site_id, Run.state).where(Run.id == run_id).limit(1)
         )
         row = (await self.database_session.execute(statement)).first()
         if row is None:
@@ -50,8 +44,6 @@ class LlmGeneratorRepository:
             run_id=str(row[0]),
             site_id=str(row[1]),
             state=str(row[2]),
-            llms_txt_s3_key=str(row[3]) if row[3] else None,
-            bundle_s3_key=str(row[4]) if row[4] else None,
         )
 
     async def get_page_context_by_url(

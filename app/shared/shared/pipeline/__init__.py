@@ -18,6 +18,7 @@ from shared.pipeline.processing_message import (
     build_processing_requested_message,
     parse_processing_requested_message,
 )
+from shared.pipeline.artifact_keys import generated_bundle_key, generated_prefix
 from shared.pipeline.summary_placeholders import (
     apply_replacements,
     extract_placeholders,
@@ -60,4 +61,6 @@ __all__ = [
     "parse_fetch_requested_message",
     "build_processing_requested_message",
     "parse_processing_requested_message",
+    "generated_prefix",
+    "generated_bundle_key",
 ]

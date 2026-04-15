@@ -143,19 +143,13 @@ class ProcessingRepository:
         self,
         *,
         run_id: str,
-        output_mode: str,
-        root_key: str,
-        bundle_key: str | None,
     ) -> bool:
-        is_hierarchical = output_mode == "hierarchical"
         ready_statement = (
             update(Run)
             .where(Run.id == run_id)
             .where(Run.state == RUN_STATE_PROCESSING)
             .values(
                 state=RUN_STATE_READY_FOR_LLM_GENERATION,
-                llms_txt_s3_key=(None if is_hierarchical else root_key),
-                bundle_s3_key=(bundle_key if is_hierarchical else None),
                 error_message=None,
             )
             .returning(Run.id)

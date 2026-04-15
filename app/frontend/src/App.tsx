@@ -69,17 +69,14 @@ export function App() {
 
   const canSubmit = () => {
     return targetUrl.trim().length > 0 && !isSubmitting;
-  }
+  };
 
   const canRequestDownloads = useMemo(() => {
     if (activeRunId === null || currentRunStatus === null) {
       return false;
     }
 
-    const isCompletedRun = currentRunStatus.stage === "completed";
-    const hasDownloadableOutput =
-      currentRunStatus.has_llms_txt || currentRunStatus.has_bundle_zip;
-    return isCompletedRun && hasDownloadableOutput;
+    return currentRunStatus.stage === "completed";
   }, [activeRunId, currentRunStatus]);
 
   async function handleGenerateSubmit(submitEvent: FormEvent<HTMLFormElement>) {
@@ -235,20 +232,11 @@ export function App() {
                 )}
                 {downloads !== null && (
                   <ul className="downloads-list">
-                    {downloads.llms_txt_url !== null && (
-                      <li>
-                        <a href={downloads.llms_txt_url} target="_blank" rel="noreferrer">
-                          Download llms.txt
-                        </a>
-                      </li>
-                    )}
-                    {downloads.bundle_zip_url !== null && (
-                      <li>
-                        <a href={downloads.bundle_zip_url} target="_blank" rel="noreferrer">
-                          Download bundle.zip
-                        </a>
-                      </li>
-                    )}
+                    <li>
+                      <a href={downloads.bundle_zip_url} target="_blank" rel="noreferrer">
+                        Download bundle.zip
+                      </a>
+                    </li>
                   </ul>
                 )}
               </div>

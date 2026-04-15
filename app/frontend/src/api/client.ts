@@ -16,8 +16,6 @@ export type RunStatusResponse = {
   pages_detected: number;
   pages_queued: number;
   pages_completed: number;
-  has_llms_txt: boolean;
-  has_bundle_zip: boolean;
   error_message: string | null;
   updated_at: string;
 };
@@ -30,8 +28,7 @@ export type SiteResponse = {
 
 export type RunDownloadsResponse = {
   run_id: string;
-  llms_txt_url: string | null;
-  bundle_zip_url: string | null;
+  bundle_zip_url: string;
   expires_in_seconds: number;
 };
 

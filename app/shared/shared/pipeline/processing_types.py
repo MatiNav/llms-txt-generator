@@ -25,6 +25,7 @@ class ProcessedPage:
     mailto_links: list[str]
     breadcrumbs: list[str]
     content_length: int
+    normalized_content: str
 
 
 @dataclass(frozen=True)

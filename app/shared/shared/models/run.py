@@ -70,15 +70,6 @@ class Run(Base):
         default=0,
     )
 
-    llms_txt_s3_key: Mapped[str | None] = mapped_column(
-        String,
-        nullable=True,
-    )
-    bundle_s3_key: Mapped[str | None] = mapped_column(
-        String,
-        nullable=True,
-    )
-
     error_message: Mapped[str | None] = mapped_column(
         String,
         nullable=True,

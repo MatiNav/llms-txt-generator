@@ -22,8 +22,6 @@ function createStableFingerprint(runStatus: RunStatusResponse): string {
     pagesDetected: runStatus.pages_detected,
     pagesQueued: runStatus.pages_queued,
     pagesCompleted: runStatus.pages_completed,
-    hasLlmsTxt: runStatus.has_llms_txt,
-    hasBundleZip: runStatus.has_bundle_zip,
     errorMessage: runStatus.error_message,
   });
 }

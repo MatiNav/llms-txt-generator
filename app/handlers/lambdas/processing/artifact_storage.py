@@ -1,5 +1,6 @@
 import aioboto3
 from botocore.exceptions import ClientError
+from shared.pipeline.artifact_keys import generated_prefix
 
 
 class ProcessingArtifactStorage:
@@ -50,8 +51,4 @@ class ProcessingArtifactStorage:
     @staticmethod
     def build_generated_key(*, run_id: str, relative_path: str) -> str:
         normalized_relative_path = relative_path.lstrip("/")
-        return f"runs/{run_id}/generated/{normalized_relative_path}"
-
-    @staticmethod
-    def generated_bundle_prefix(run_id: str) -> str:
-        return f"runs/{run_id}/generated/"
+        return f"{generated_prefix(run_id)}{normalized_relative_path}"

@@ -8,6 +8,7 @@ from server.schemas.downloads import RunDownloadsResponse
 from server.services.run_service import RunService
 from shared.constants.run_state import RUN_STATE_COMPLETED
 from shared.logging import log_event
+from shared.pipeline.artifact_keys import generated_bundle_key
 
 
 logger = logging.getLogger(__name__)
@@ -38,19 +39,15 @@ class DownloadService:
         if self.generated_output_bucket_name == "":
             raise RuntimeError("GENERATED_OUTPUT_BUCKET_NAME is not configured")
 
-        llms_txt_url = await self._sign_if_present(run_snapshot.llms_txt_s3_key)
-        bundle_zip_url = await self._sign_if_present(run_snapshot.bundle_s3_key)
+        bundle_object_key = generated_bundle_key(str(run_snapshot.run_id))
+        bundle_zip_url = await self._sign_object(bundle_object_key)
         return RunDownloadsResponse(
             run_id=run_snapshot.run_id,
-            llms_txt_url=llms_txt_url,
             bundle_zip_url=bundle_zip_url,
             expires_in_seconds=self.download_url_ttl_seconds,
         )
 
-    async def _sign_if_present(self, object_key: str | None) -> str | None:
-        if object_key is None:
-            return None
-
+    async def _sign_object(self, object_key: str) -> str:
         session = aioboto3.Session()
         async with session.client("s3", region_name=self.aws_region) as s3_client:
             await s3_client.head_object(

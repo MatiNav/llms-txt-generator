@@ -53,6 +53,7 @@ def extract_processed_page(
         mailto_links=mailto_links,
         breadcrumbs=breadcrumbs,
         content_length=len(html_content),
+        normalized_content=_extract_normalized_content(soup),
     )
 
     log_decision(
@@ -188,3 +189,52 @@ def _unique_preserving_order(values: list[str]) -> list[str]:
         seen_values.add(current_value)
         unique_values.append(current_value)
     return unique_values
+
+
+def _extract_normalized_content(soup: BeautifulSoup) -> str:
+    for removable_node in soup.select("script, style, noscript, svg, iframe"):
+        removable_node.decompose()
+
+    content_root = (
+        soup.select_one("main")
+        or soup.select_one("article")
+        or soup.select_one("[role='main']")
+        or soup.body
+    )
+    if content_root is None:
+        return ""
+
+    normalized_lines: list[str] = []
+    content_nodes = content_root.find_all(["h1", "h2", "h3", "p", "li", "pre"])
+    for content_node in content_nodes:
+        normalized_text = content_node.get_text(" ", strip=True)
+        if not normalized_text:
+            continue
+
+        if content_node.name == "h1":
+            normalized_lines.append(f"# {normalized_text}")
+            continue
+
+        if content_node.name == "h2":
+            normalized_lines.append(f"## {normalized_text}")
+            continue
+
+        if content_node.name == "h3":
+            normalized_lines.append(f"### {normalized_text}")
+            continue
+
+        if content_node.name == "li":
+            normalized_lines.append(f"- {normalized_text}")
+            continue
+
+        if content_node.name == "pre":
+            normalized_lines.extend(["```", normalized_text, "```"])
+            continue
+
+        normalized_lines.append(normalized_text)
+
+    if not normalized_lines:
+        return ""
+
+    normalized_content = "\n".join(normalized_lines).strip()
+    return normalized_content[:120000]
