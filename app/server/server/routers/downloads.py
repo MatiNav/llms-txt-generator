@@ -22,7 +22,8 @@ async def get_run_downloads(
         )
     except RunNotCompletedError as run_not_completed_error:
         raise HTTPException(
-            status_code=409, detail=str(run_not_completed_error)
+            status_code=409,
+            detail=run_not_completed_error.to_response_detail(),
         ) from run_not_completed_error
 
     if run_download_links is None:

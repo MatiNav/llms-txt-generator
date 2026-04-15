@@ -67,9 +67,20 @@ export function App() {
     };
   }, []);
 
-  const canSubmit = useMemo(() => {
+  const canSubmit = () => {
     return targetUrl.trim().length > 0 && !isSubmitting;
-  }, [targetUrl, isSubmitting]);
+  }
+
+  const canRequestDownloads = useMemo(() => {
+    if (activeRunId === null || currentRunStatus === null) {
+      return false;
+    }
+
+    const isCompletedRun = currentRunStatus.stage === "completed";
+    const hasDownloadableOutput =
+      currentRunStatus.has_llms_txt || currentRunStatus.has_bundle_zip;
+    return isCompletedRun && hasDownloadableOutput;
+  }, [activeRunId, currentRunStatus]);
 
   async function handleGenerateSubmit(submitEvent: FormEvent<HTMLFormElement>) {
     submitEvent.preventDefault();
@@ -100,7 +111,7 @@ export function App() {
   }
 
   async function handleLoadDownloads() {
-    if (activeRunId === null) {
+    if (!canRequestDownloads || activeRunId === null) {
       return;
     }
     setDownloadError(null);
@@ -210,9 +221,15 @@ export function App() {
 
             {isFinished && (
               <div className="downloads-block">
-                <button className="secondary-button" onClick={handleLoadDownloads}>
-                  Load download links
-                </button>
+                {canRequestDownloads ? (
+                  <button className="secondary-button" onClick={handleLoadDownloads}>
+                    Load download links
+                  </button>
+                ) : (
+                  <p>
+                    Downloads are only available for successfully completed runs.
+                  </p>
+                )}
                 {downloadError !== null && (
                   <p className="error-text">{downloadError}</p>
                 )}

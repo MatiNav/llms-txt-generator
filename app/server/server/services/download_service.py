@@ -33,7 +33,7 @@ class DownloadService:
             return None
 
         if run_snapshot.run_state != RUN_STATE_COMPLETED:
-            raise RunNotCompletedError("Run is not completed yet")
+            raise RunNotCompletedError(run_state=run_snapshot.run_state)
 
         if self.generated_output_bucket_name == "":
             raise RuntimeError("GENERATED_OUTPUT_BUCKET_NAME is not configured")

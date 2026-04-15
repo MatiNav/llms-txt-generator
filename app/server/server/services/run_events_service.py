@@ -57,7 +57,7 @@ class RunEventsService:
             current_fingerprint = json.dumps(stable_fingerprint_payload, sort_keys=True)
             if current_fingerprint != last_fingerprint:
                 stream_payload = {
-                    **run_status.model_dump(),
+                    **run_status.model_dump(mode="json"),
                     "timestamp": run_status.updated_at.isoformat(),
                 }
                 yield ServerSentEvent(
