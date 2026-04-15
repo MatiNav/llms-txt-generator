@@ -1,4 +1,7 @@
+from components.app_runner_domain_service import AppRunnerDomainService
+from components.domain_service import DomainService
 from components.discoverability_queue_service import DiscoverabilityQueueService
+from components.frontend_hosting_service import FrontendHostingService
 from components.generate_api_service import GenerateApiService
 from components.generated_output_storage import GeneratedOutputStorage
 from components.generation_data_storage import GenerationDataStorage
@@ -11,7 +14,10 @@ from components.raw_html_storage import RawHtmlStorage
 from components.spa_fetcher_service import SpaFetcherService
 
 __all__ = [
+    "AppRunnerDomainService",
+    "DomainService",
     "DiscoverabilityQueueService",
+    "FrontendHostingService",
     "GenerationDataStorage",
     "GeneratedOutputStorage",
     "GenerateApiService",

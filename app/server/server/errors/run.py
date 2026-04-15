@@ -1,0 +1,2 @@
+class RunNotCompletedError(Exception):
+    pass
