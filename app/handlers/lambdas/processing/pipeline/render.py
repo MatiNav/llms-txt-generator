@@ -2,6 +2,7 @@ import logging
 
 from shared.logging import log_decision
 from shared.pipeline.processing_types import (
+    OptionalEntry,
     RenderedFile,
     RootDocumentIR,
     SectionDocumentIR,
@@ -67,12 +68,33 @@ def infer_output_mode(
 
 
 def _render_root_file(root_document: RootDocumentIR) -> RenderedFile:
-    lines: list[str] = ["# llms.txt", "", root_document.root_summary_placeholder, ""]
+    lines: list[str] = [
+        f"# {root_document.root_title}",
+        "",
+        f"> {root_document.root_summary_placeholder}",
+        "",
+        root_document.root_details_placeholder,
+        "",
+    ]
 
     for section_document in root_document.sections:
         section_file_path = _section_relative_path(section_document.section_key)
-        lines.append(f"## [{section_document.section_title}]({section_file_path})")
-        lines.append(section_document.summary_placeholder)
+        lines.extend(
+            [
+                f"## {section_document.section_title}",
+                "",
+                (
+                    f"- [{section_document.section_title}]({section_file_path}): "
+                    f"{section_short_summary_placeholder(section_document.section_key)}"
+                ),
+                "",
+            ]
+        )
+
+    if root_document.optional_entries:
+        lines.extend(["## Optional", ""])
+        for optional_entry in root_document.optional_entries:
+            lines.append(_render_optional_entry(optional_entry))
         lines.append("")
 
     return RenderedFile(
@@ -106,3 +128,7 @@ def _render_section_file(section_document: SectionDocumentIR) -> RenderedFile:
 
 def _section_relative_path(section_key: str) -> str:
     return f"{section_key}/llms.txt"
+
+
+def _render_optional_entry(optional_entry: OptionalEntry) -> str:
+    return f"- [{optional_entry.title}]({optional_entry.url})"

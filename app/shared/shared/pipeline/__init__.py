@@ -4,6 +4,9 @@ from shared.pipeline.llm_generation_message import (
     parse_llm_generation_requested_message,
 )
 from shared.pipeline.processing_types import (
+    OptionalCandidate,
+    OptionalDecision,
+    OptionalEntry,
     PageForProcessing,
     ProcessedPage,
     RenderedFile,
@@ -19,6 +22,7 @@ from shared.pipeline.summary_placeholders import (
     apply_replacements,
     extract_placeholders,
     page_summary_placeholder,
+    root_details_placeholder,
     root_summary_placeholder,
     section_short_summary_placeholder,
     section_summary_placeholder,
@@ -33,10 +37,14 @@ from shared.pipeline.url_norm import (
 __all__ = [
     "PageForProcessing",
     "ProcessedPage",
+    "OptionalCandidate",
+    "OptionalDecision",
+    "OptionalEntry",
     "SectionGroup",
     "SectionDocumentIR",
     "RootDocumentIR",
     "RenderedFile",
+    "root_details_placeholder",
     "root_summary_placeholder",
     "section_summary_placeholder",
     "section_short_summary_placeholder",
