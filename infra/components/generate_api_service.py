@@ -16,6 +16,9 @@ class GenerateApiService(Construct):
         database_url: str,
         server_runtime_role_arn: str,
         region_name: str,
+        frontend_origin: str,
+        generated_output_bucket_name: str,
+        download_url_ttl_seconds: int,
     ) -> None:
         super().__init__(scope, construct_id)
 
@@ -77,6 +80,18 @@ class GenerateApiService(Construct):
                             apprunner.CfnService.KeyValuePairProperty(
                                 name="DATABASE_URL",
                                 value=database_url,
+                            ),
+                            apprunner.CfnService.KeyValuePairProperty(
+                                name="FRONTEND_ORIGIN",
+                                value=frontend_origin,
+                            ),
+                            apprunner.CfnService.KeyValuePairProperty(
+                                name="GENERATED_OUTPUT_BUCKET_NAME",
+                                value=generated_output_bucket_name,
+                            ),
+                            apprunner.CfnService.KeyValuePairProperty(
+                                name="DOWNLOAD_URL_TTL_SECONDS",
+                                value=str(download_url_ttl_seconds),
                             ),
                         ],
                     ),

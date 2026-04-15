@@ -3,7 +3,10 @@ import os
 from aws_cdk import CfnOutput, Stack
 from constructs import Construct
 
+from components.app_runner_domain_service import AppRunnerDomainService
+from components.domain_service import DomainService
 from components.discoverability_queue_service import DiscoverabilityQueueService
+from components.frontend_hosting_service import FrontendHostingService
 from components.generate_api_service import GenerateApiService
 from components.generated_output_storage import GeneratedOutputStorage
 from components.generation_data_storage import GenerationDataStorage
@@ -19,6 +22,18 @@ from components.spa_fetcher_service import SpaFetcherService
 class LlmTxtGeneratorStack(Stack):
     def __init__(self, scope: Construct, construct_id: str, **kwargs) -> None:
         super().__init__(scope, construct_id, **kwargs)
+
+        root_domain_name = "matiasnavarrodev.com"
+        frontend_subdomain_name = "profound"
+        api_subdomain_name = "profound-api"
+
+        domain_service = DomainService(
+            self,
+            "DomainService",
+            root_domain_name=root_domain_name,
+            frontend_subdomain_name=frontend_subdomain_name,
+            api_subdomain_name=api_subdomain_name,
+        )
 
         discoverability_queue_service = DiscoverabilityQueueService(
             self, "DiscoverabilityQueueService"
@@ -36,6 +51,9 @@ class LlmTxtGeneratorStack(Stack):
         openai_model_name = os.getenv("OPENAI_MODEL_NAME", "gpt-4.1-mini")
 
         generation_data_storage = GenerationDataStorage(self, "GenerationDataStorage")
+        generated_output_storage.generated_output_bucket.grant_read(
+            discoverability_queue_service.server_runtime_role
+        )
         generate_api_service = GenerateApiService(
             self,
             "GenerateApiService",
@@ -43,6 +61,22 @@ class LlmTxtGeneratorStack(Stack):
             database_url=generation_data_storage.database_url,
             server_runtime_role_arn=discoverability_queue_service.server_runtime_role.role_arn,
             region_name=self.region,
+            frontend_origin=f"https://{domain_service.domain_names.frontend_domain_name}",
+            generated_output_bucket_name=generated_output_storage.generated_output_bucket.bucket_name,
+            download_url_ttl_seconds=900,
+        )
+        frontend_hosting_service = FrontendHostingService(
+            self,
+            "FrontendHostingService",
+            hosted_zone=domain_service.hosted_zone,
+            frontend_domain_name=domain_service.domain_names.frontend_domain_name,
+        )
+        app_runner_domain_service = AppRunnerDomainService(
+            self,
+            "AppRunnerDomainService",
+            hosted_zone=domain_service.hosted_zone,
+            app_runner_service_arn=generate_api_service.server_service.attr_service_arn,
+            api_domain_name=domain_service.domain_names.api_domain_name,
         )
         orchestrator_service = OrchestratorService(
             self,
@@ -98,6 +132,18 @@ class LlmTxtGeneratorStack(Stack):
             "ServerServiceUrl",
             value=f"https://{generate_api_service.server_service.attr_service_url}",
             description="Public URL for the App Runner server",
+        )
+        CfnOutput(
+            self,
+            "FrontendPublicDomainUrl",
+            value=f"https://{domain_service.domain_names.frontend_domain_name}",
+            description="Public URL for the frontend domain",
+        )
+        CfnOutput(
+            self,
+            "ApiPublicDomainUrl",
+            value=f"https://{domain_service.domain_names.api_domain_name}",
+            description="Public URL for the API custom domain",
         )
         CfnOutput(
             self,

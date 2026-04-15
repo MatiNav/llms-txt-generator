@@ -5,11 +5,16 @@ from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
 
 from server.config import get_server_settings
 from shared.db.migrate import run_migrations
 from shared.logging import configure_json_logging, log_event
+from server.routers.downloads import router as downloads_router
 from server.routers.generate import router as generate_router
+from server.routers.run_events import router as run_events_router
+from server.routers.runs import router as runs_router
+from server.routers.sites import router as sites_router
 
 
 logger = logging.getLogger(__name__)
@@ -50,6 +55,15 @@ async def lifespan(_: FastAPI) -> AsyncGenerator[None, None]:
 
 
 app = FastAPI(title="llms.txt generator server", lifespan=lifespan)
+settings = get_server_settings()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[settings.frontend_origin],
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 @app.middleware("http")
@@ -94,6 +108,10 @@ async def request_logging_middleware(request: Request, call_next):
 
 
 app.include_router(generate_router)
+app.include_router(runs_router)
+app.include_router(sites_router)
+app.include_router(downloads_router)
+app.include_router(run_events_router)
 
 
 @app.get("/health")
