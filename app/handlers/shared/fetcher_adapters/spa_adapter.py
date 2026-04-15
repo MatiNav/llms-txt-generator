@@ -68,9 +68,14 @@ class SpaFetcherAdapter:
         )
         accepted_urls = filter_spa_links(discovered_urls)
         status_code = None if response is None else response.status
+        response_headers: dict[str, str] = {}
+        if response is not None:
+            response_headers = await response.all_headers()
 
         return FetchedPage(
             html_content=html_content,
             http_status_code=status_code,
             discovered_urls=accepted_urls,
+            etag=response_headers.get("etag"),
+            last_modified=response_headers.get("last-modified"),
         )

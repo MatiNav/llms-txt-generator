@@ -16,6 +16,7 @@ export type RunStatusResponse = {
   pages_detected: number;
   pages_queued: number;
   pages_completed: number;
+  completed_reason: "unchanged_root" | "processed" | null;
   error_message: string | null;
   updated_at: string;
 };

@@ -1,5 +1,6 @@
 from shared.constants.render_mode import RenderModeValue
 from shared.constants.sns_attributes import build_render_mode_attribute
+from shared.constants.trigger_reason import TriggerReasonValue
 from shared.queue.sns_client import SNSClient
 
 
@@ -7,6 +8,7 @@ async def publish_route_message(
     routing_topic_client: SNSClient,
     fetch_topic_arn: str,
     render_mode: RenderModeValue,
+    trigger_reason: TriggerReasonValue,
     run_id: str,
     page_id: str,
     site_id: str,
@@ -22,6 +24,7 @@ async def publish_route_message(
             "url": page_url,
             "depth": page_depth,
             "render_mode": render_mode,
+            "trigger_reason": trigger_reason,
         },
         message_attributes=build_render_mode_attribute(render_mode),
     )

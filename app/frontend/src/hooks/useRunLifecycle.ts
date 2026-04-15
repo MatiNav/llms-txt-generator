@@ -22,6 +22,7 @@ function createStableFingerprint(runStatus: RunStatusResponse): string {
     pagesDetected: runStatus.pages_detected,
     pagesQueued: runStatus.pages_queued,
     pagesCompleted: runStatus.pages_completed,
+    completedReason: runStatus.completed_reason,
     errorMessage: runStatus.error_message,
   });
 }
@@ -37,6 +38,7 @@ export function useRunLifecycle(activeRunId: string | null) {
   const [sseDisconnected, setSseDisconnected] = useState(false);
   const [lifecycleError, setLifecycleError] = useState<string | null>(null);
   const lastFingerprintRef = useRef<string | null>(null);
+  const reachedTerminalStageRef = useRef(false);
 
   useEffect(() => {
     setCurrentRunStatus(null);
@@ -44,6 +46,7 @@ export function useRunLifecycle(activeRunId: string | null) {
     setSseDisconnected(false);
     setLifecycleError(null);
     lastFingerprintRef.current = null;
+    reachedTerminalStageRef.current = false;
 
     if (activeRunId === null) {
       return;
@@ -61,6 +64,7 @@ export function useRunLifecycle(activeRunId: string | null) {
 
       lastFingerprintRef.current = statusFingerprint;
       setCurrentRunStatus(runStatus);
+      reachedTerminalStageRef.current = isTerminalStatus(runStatus);
       setTimelineEvents((previousTimelineEvents) => [
         ...previousTimelineEvents,
         {
@@ -104,6 +108,11 @@ export function useRunLifecycle(activeRunId: string | null) {
 
     eventSource.onerror = () => {
       if (isDisposed) {
+        return;
+      }
+
+      if (reachedTerminalStageRef.current) {
+        eventSource.close();
         return;
       }
 

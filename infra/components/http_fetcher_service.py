@@ -1,12 +1,11 @@
-from pathlib import Path
-
-from aws_cdk import BundlingOptions, Duration, IgnoreMode
-from aws_cdk import aws_lambda as lambda_
+from aws_cdk import Duration
 from aws_cdk import aws_lambda_event_sources as lambda_event_sources
 from aws_cdk import aws_s3 as s3
 from aws_cdk import aws_sns as sns
 from aws_cdk import aws_sqs as sqs
 from constructs import Construct
+
+from components.python_lambda_factory import build_python_lambda
 
 
 class HttpFetcherService(Construct):
@@ -22,34 +21,13 @@ class HttpFetcherService(Construct):
     ) -> None:
         super().__init__(scope, construct_id)
 
-        repository_root = Path(__file__).resolve().parents[2]
-        http_fetcher_function = lambda_.Function(
-            self,
-            "HttpFetcherFunction",
+        http_fetcher_function = build_python_lambda(
+            scope=self,
+            construct_id="HttpFetcherFunction",
             function_name="llmstxt-http-fetcher",
-            runtime=lambda_.Runtime.PYTHON_3_12,
-            architecture=lambda_.Architecture.ARM_64,
             handler="handlers.lambdas.http_fetcher.handler.handler",
-            timeout=Duration.seconds(90),
+            timeout_seconds=90,
             memory_size=512,
-            code=lambda_.Code.from_asset(
-                str(repository_root),
-                ignore_mode=IgnoreMode.GLOB,
-                exclude=[
-                    "infra/cdk.out",
-                    "infra/.venv",
-                    "**/__pycache__",
-                    "**/.pytest_cache",
-                ],
-                bundling=BundlingOptions(
-                    image=lambda_.Runtime.PYTHON_3_12.bundling_image,
-                    command=[
-                        "bash",
-                        "-lc",
-                        "pip install --no-cache-dir ./app/shared -t /asset-output && cp -R app/handlers /asset-output/handlers",
-                    ],
-                ),
-            ),
             environment={
                 "DATABASE_URL": database_url,
                 "RAW_HTML_BUCKET_NAME": raw_html_bucket.bucket_name,

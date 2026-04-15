@@ -1,5 +1,6 @@
 import asyncio
 import json
+import logging
 from collections.abc import AsyncGenerator
 from uuid import UUID
 
@@ -8,6 +9,10 @@ from sse_starlette import ServerSentEvent
 from server.repositories.run_repository import RunRepository
 from server.services.run_service import RunService
 from shared.db.session import get_db_session
+from shared.logging import log_event
+
+
+logger = logging.getLogger(__name__)
 
 
 class RunEventsService:
@@ -26,6 +31,15 @@ class RunEventsService:
         event_counter = 1
         last_fingerprint: str | None = None
 
+        log_event(
+            logger,
+            logging.INFO,
+            "run_events.stream_started",
+            service="server",
+            component="run_events_service",
+            run_id=str(run_id),
+        )
+
         connected_payload = {"run_id": str(run_id), "message": "stream_connected"}
         yield ServerSentEvent(
             event="run.connected",
@@ -41,6 +55,15 @@ class RunEventsService:
                 run_status = await run_service.get_run_status(run_id=run_id)
 
             if run_status is None:
+                log_event(
+                    logger,
+                    logging.INFO,
+                    "run_events.stream_ended",
+                    service="server",
+                    component="run_events_service",
+                    run_id=str(run_id),
+                    reason="run_not_found",
+                )
                 return
 
             stable_fingerprint_payload = {
@@ -50,6 +73,7 @@ class RunEventsService:
                 "pages_detected": run_status.pages_detected,
                 "pages_queued": run_status.pages_queued,
                 "pages_completed": run_status.pages_completed,
+                "completed_reason": run_status.completed_reason,
                 "error_message": run_status.error_message,
             }
             current_fingerprint = json.dumps(stable_fingerprint_payload, sort_keys=True)
@@ -66,7 +90,44 @@ class RunEventsService:
                 event_counter += 1
                 last_fingerprint = current_fingerprint
 
+                log_event(
+                    logger,
+                    logging.INFO,
+                    "run_events.status_emitted",
+                    service="server",
+                    component="run_events_service",
+                    run_id=str(run_status.run_id),
+                    stage=run_status.stage,
+                    state=run_status.state,
+                    pages_completed=run_status.pages_completed,
+                    pages_queued=run_status.pages_queued,
+                    completed_reason=run_status.completed_reason,
+                )
+            else:
+                keepalive_payload = {
+                    "run_id": str(run_status.run_id),
+                    "timestamp": run_status.updated_at.isoformat(),
+                }
+                yield ServerSentEvent(
+                    event="run.keepalive",
+                    id=str(event_counter),
+                    data=json.dumps(keepalive_payload),
+                )
+                event_counter += 1
+
             if run_status.stage in {"completed", "failed"}:
+                log_event(
+                    logger,
+                    logging.INFO,
+                    "run_events.stream_ended",
+                    service="server",
+                    component="run_events_service",
+                    run_id=str(run_status.run_id),
+                    reason="terminal_stage",
+                    stage=run_status.stage,
+                    state=run_status.state,
+                    completed_reason=run_status.completed_reason,
+                )
                 return
 
             await asyncio.sleep(self.poll_interval_seconds)

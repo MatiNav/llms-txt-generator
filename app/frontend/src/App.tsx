@@ -29,6 +29,13 @@ function formatStageLabel(stageName: string): string {
   }
 }
 
+function formatCompletedReasonLabel(completedReason: string | null): string {
+  if (completedReason === "unchanged_root") {
+    return "Completed — no root changes detected";
+  }
+  return "Completed — artifacts regenerated";
+}
+
 export function App() {
   const [targetUrl, setTargetUrl] = useState("");
   const [renderMode, setRenderMode] = useState<RenderMode>("http");
@@ -181,6 +188,12 @@ export function App() {
                 <p>
                   <strong>Stage:</strong> {formatStageLabel(currentRunStatus.stage)}
                 </p>
+                {currentRunStatus.stage === "completed" && (
+                  <p>
+                    <strong>Outcome:</strong>{" "}
+                    {formatCompletedReasonLabel(currentRunStatus.completed_reason)}
+                  </p>
+                )}
                 <p>
                   <strong>Pages detected:</strong> {currentRunStatus.pages_detected}
                 </p>

@@ -1,6 +1,6 @@
 import logging
 
-from sqlalchemy import func, update
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from orchestrator.config import SERVICE_NAME

@@ -13,5 +13,6 @@ class RunStatusResponse(BaseModel):
     pages_detected: int
     pages_queued: int
     pages_completed: int
+    completed_reason: str | None
     error_message: str | None
     updated_at: datetime

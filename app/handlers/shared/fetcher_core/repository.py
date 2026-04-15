@@ -12,7 +12,7 @@ from shared.constants.page_status import (
     PAGE_STATUS_NEW,
 )
 from shared.constants.run_state import RUN_STATE_DISCOVERING
-from shared.models import Run, RunPage
+from shared.models import Run, RunPage, SitePage
 from shared.pipeline.url_norm import canonical_url
 
 
@@ -27,6 +27,13 @@ class RunLimitsSnapshot:
     max_depth: int
     max_pages: int
     pages_queued: int
+
+
+@dataclass(frozen=True)
+class SitePageBaseline:
+    content_hash: str | None
+    etag: str | None
+    last_modified: str | None
 
 
 class FetcherRepository:
@@ -110,12 +117,81 @@ class FetcherRepository:
 
         return reserved_children
 
+    async def get_site_page_baseline(
+        self,
+        *,
+        site_id: str,
+        normalized_url: str,
+    ) -> SitePageBaseline | None:
+        baseline_statement = (
+            select(
+                SitePage.last_content_hash,
+                SitePage.last_etag,
+                SitePage.last_modified,
+            )
+            .where(SitePage.site_id == site_id)
+            .where(SitePage.normalized_url == normalized_url)
+            .limit(1)
+        )
+        baseline_result = await self.database_session.execute(baseline_statement)
+        baseline_row = baseline_result.first()
+        if baseline_row is None:
+            return None
+
+        return SitePageBaseline(
+            content_hash=baseline_row[0],
+            etag=baseline_row[1],
+            last_modified=baseline_row[2],
+        )
+
+    async def upsert_site_page_baseline(
+        self,
+        *,
+        site_id: str,
+        normalized_url: str,
+        run_id: str,
+        html_s3_key: str,
+        content_hash: str,
+        etag: str | None,
+        last_modified: str | None,
+    ) -> None:
+        upsert_statement = (
+            postgres_insert(SitePage)
+            .values(
+                site_id=site_id,
+                normalized_url=normalized_url,
+                last_content_hash=content_hash,
+                last_etag=etag,
+                last_modified=last_modified,
+                last_html_s3_key=html_s3_key,
+                last_seen_run_id=run_id,
+                is_active=True,
+            )
+            .on_conflict_do_update(
+                constraint="uq_site_page_url",
+                set_={
+                    "last_content_hash": content_hash,
+                    "last_etag": etag,
+                    "last_modified": last_modified,
+                    "last_html_s3_key": html_s3_key,
+                    "last_seen_run_id": run_id,
+                    "is_active": True,
+                    "updated_at": func.now(),
+                },
+            )
+        )
+        await self.database_session.execute(upsert_statement)
+
     async def finalize_page_success(
         self,
         *,
         page_id: str,
         html_s3_key: str,
         http_status_code: int | None,
+        etag: str | None,
+        last_modified: str | None,
+        content_hash: str,
+        page_status: str,
         metadata_json: dict,
     ) -> None:
         await self.database_session.execute(
@@ -126,6 +202,10 @@ class FetcherRepository:
                 fetch_status=FETCH_STATUS_FETCHED,
                 html_s3_key=html_s3_key,
                 http_status=http_status_code,
+                etag=etag,
+                last_modified=last_modified,
+                content_hash=content_hash,
+                page_status=page_status,
                 metadata_json=metadata_json,
                 fetched_at=func.now(),
             )

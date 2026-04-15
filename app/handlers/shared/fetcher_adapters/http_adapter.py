@@ -25,4 +25,6 @@ class HttpFetcherAdapter:
             html_content=html_content,
             http_status_code=response.status_code,
             discovered_urls=discovered_urls,
+            etag=response.headers.get("etag"),
+            last_modified=response.headers.get("last-modified"),
         )

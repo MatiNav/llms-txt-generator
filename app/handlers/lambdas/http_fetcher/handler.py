@@ -1,26 +1,15 @@
-import asyncio
 import json
 import logging
 from typing import Any
 
 from handlers.lambdas.http_fetcher.runtime import build_http_fetcher_runtime
+from handlers.shared.lambda_runtime.base_handler import BaseLambdaHandler
 from shared.constants.render_mode import RENDER_MODE_HTTP
-from shared.db.engine import get_engine
-from shared.db.session import get_session_factory
-from shared.logging import configure_json_logging, log_event
+from shared.logging import log_event
 from shared.pipeline.fetch_message import parse_fetch_requested_message
 
 
 logger = logging.getLogger(__name__)
-
-
-async def _dispose_cached_db_resources() -> None:
-    if get_engine.cache_info().currsize > 0:
-        cached_engine = get_engine()
-        await cached_engine.dispose()
-
-    get_session_factory.cache_clear()
-    get_engine.cache_clear()
 
 
 async def _process_record_body(raw_body: str, runtime) -> None:
@@ -38,17 +27,22 @@ async def _process_record_body(raw_body: str, runtime) -> None:
     )
 
 
-async def _process_batch(event: dict[str, Any]) -> dict[str, list[dict[str, str]]]:
-    runtime = build_http_fetcher_runtime()
-    batch_failures: list[dict[str, str]] = []
+class HttpFetcherLambdaHandler(BaseLambdaHandler):
+    def __init__(self) -> None:
+        self.runtime = None
 
-    try:
+    async def process(
+        self, event: dict[str, Any], context: Any
+    ) -> dict[str, list[dict[str, str]]]:
+        self.runtime = build_http_fetcher_runtime()
+        batch_failures: list[dict[str, str]] = []
+
         records = event.get("Records", [])
         for record in records:
             message_id = str(record.get("messageId", ""))
             raw_body = str(record.get("body", "{}"))
             try:
-                await _process_record_body(raw_body, runtime)
+                await _process_record_body(raw_body, self.runtime)
             except Exception as processing_error:
                 log_event(
                     logger,
@@ -60,13 +54,17 @@ async def _process_batch(event: dict[str, Any]) -> dict[str, list[dict[str, str]
                     error_message=str(processing_error)[:500],
                 )
                 batch_failures.append({"itemIdentifier": message_id})
-    finally:
-        await runtime.fetcher_core.repository.database_session.close()
-        await _dispose_cached_db_resources()
 
-    return {"batchItemFailures": batch_failures}
+        return {"batchItemFailures": batch_failures}
+
+    async def cleanup(self) -> None:
+        if self.runtime is None:
+            return
+        await self.runtime.fetcher_core.repository.database_session.close()
+
+
+http_fetcher_lambda_handler = HttpFetcherLambdaHandler()
 
 
 def handler(event: dict[str, Any], context: Any) -> dict[str, list[dict[str, str]]]:
-    configure_json_logging()
-    return asyncio.run(_process_batch(event))
+    return http_fetcher_lambda_handler.run(event=event, context=context)
