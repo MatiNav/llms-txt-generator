@@ -19,8 +19,8 @@ def render_ctx_documents(root_document: RootDocumentIR) -> list[RenderedFile]:
 def _render_ctx_file(root_document: RootDocumentIR, *, include_optional: bool) -> str:
     mode = "ctx-full" if include_optional else "ctx"
     lines: list[str] = [
-        f'<project title="{escape(root_document.root_title)}" mode="{mode}">',
-        f"{escape(root_document.root_summary_placeholder)}",
+        f'<project title="{_escape_attr(root_document.root_title)}" mode="{mode}">',
+        f"{_escape_text(root_document.root_summary_placeholder)}",
         "<docs>",
     ]
 
@@ -32,11 +32,11 @@ def _render_ctx_file(root_document: RootDocumentIR, *, include_optional: bool) -
             lines.extend(
                 [
                     (
-                        f'<doc title="{escape(optional_entry.title)}" '
-                        f'desc="{escape(optional_entry.description)}" '
-                        f'url="{escape(optional_entry.url)}" section="optional" optional="true">'
+                        f'<doc title="{_escape_attr(optional_entry.title)}" '
+                        f'desc="{_escape_attr(optional_entry.description)}" '
+                        f'url="{_escape_attr(optional_entry.url)}" section="optional" optional="true">'
                     ),
-                    escape(optional_entry.description),
+                    _escape_text(optional_entry.description),
                     "</doc>",
                 ]
             )
@@ -58,13 +58,21 @@ def _render_section_docs(section_document: SectionDocumentIR) -> list[str]:
         section_lines.extend(
             [
                 (
-                    f'<doc title="{escape(page_title)}" '
-                    f'desc="{escape(page_description)}" '
-                    f'url="{escape(processed_page.url)}" '
-                    f'section="{escape(section_document.section_key)}" optional="false">'
+                    f'<doc title="{_escape_attr(page_title)}" '
+                    f'desc="{_escape_attr(page_description)}" '
+                    f'url="{_escape_attr(processed_page.url)}" '
+                    f'section="{_escape_attr(section_document.section_key)}" optional="false">'
                 ),
-                escape(page_body),
+                _escape_text(page_body),
                 "</doc>",
             ]
         )
     return section_lines
+
+
+def _escape_attr(value: str) -> str:
+    return escape(value, quote=True)
+
+
+def _escape_text(value: str) -> str:
+    return escape(value, quote=False)

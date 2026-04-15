@@ -8,6 +8,7 @@ from shared.constants.page_status import (
     FETCH_STATUS_FAILED,
     FETCH_STATUS_FETCHED,
     FETCH_STATUS_FETCH_IN_PROGRESS,
+    PAGE_STATUS_UNCHANGED,
 )
 from shared.constants.run_state import (
     RUN_STATE_COMPLETED,
@@ -32,12 +33,27 @@ class RunService:
     async def get_run_snapshot(self, run_id: UUID) -> RunStatusSnapshot | None:
         return await self.run_repository.get_run_snapshot(run_id=run_id)
 
+    async def get_root_render_mode(self, run_id: UUID) -> str | None:
+        return await self.run_repository.get_root_render_mode(run_id=run_id)
+
+    async def find_latest_completed_source_run_id(
+        self,
+        *,
+        site_id: UUID,
+        render_mode: str,
+    ) -> UUID | None:
+        return await self.run_repository.find_latest_completed_source_run_id(
+            site_id=site_id,
+            render_mode=render_mode,
+        )
+
     async def get_run_status(self, run_id: UUID) -> RunStatusResponse | None:
         snapshot = await self.get_run_snapshot(run_id=run_id)
         if snapshot is None:
             return None
 
         stage_name = self._map_stage(snapshot)
+        completed_reason = self._derive_completed_reason(snapshot)
         return RunStatusResponse(
             run_id=snapshot.run_id,
             site_id=snapshot.site_id,
@@ -47,6 +63,7 @@ class RunService:
             pages_detected=snapshot.pages_detected,
             pages_queued=snapshot.pages_queued,
             pages_completed=snapshot.pages_completed,
+            completed_reason=completed_reason,
             error_message=snapshot.error_message,
             updated_at=snapshot.updated_at,
         )
@@ -99,3 +116,12 @@ class RunService:
             state=snapshot.run_state,
         )
         return "unknown"
+
+    def _derive_completed_reason(self, snapshot: RunStatusSnapshot) -> str | None:
+        if snapshot.run_state != RUN_STATE_COMPLETED:
+            return None
+
+        if snapshot.root_page_status == PAGE_STATUS_UNCHANGED:
+            return "unchanged_root"
+
+        return "processed"

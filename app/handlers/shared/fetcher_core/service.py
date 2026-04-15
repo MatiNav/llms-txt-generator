@@ -1,11 +1,18 @@
 import logging
+from hashlib import sha256
 from typing import Any
 
 from handlers.shared.fetcher_adapters.base import FetcherAdapter
 from handlers.shared.fetcher_core.repository import FetcherRepository
 from handlers.shared.fetcher_storage.raw_html_s3_storage import RawHtmlS3Storage
+from shared.constants.page_status import (
+    PAGE_STATUS_CHANGED,
+    PAGE_STATUS_NEW,
+    PAGE_STATUS_UNCHANGED,
+)
 from shared.logging import log_event
 from shared.pipeline.fetch_message import FetchRequestedMessage
+from shared.pipeline.url_norm import canonical_url
 from shared.queue.sns_client import SNSClient
 
 
@@ -96,6 +103,31 @@ class FetcherCoreService:
         next_depth: int,
     ):
         fetched_page = await fetcher_adapter.fetch_page(fetch_message["url"])
+        content_hash = self._compute_content_hash(fetched_page.html_content)
+        is_root_page = fetch_message["depth"] == 0
+        page_status = PAGE_STATUS_NEW
+        comparison_method = "none"
+
+        if is_root_page:
+            page_status, comparison_method = await self._classify_root_page_status(
+                site_id=fetch_message["site_id"],
+                page_url=fetch_message["url"],
+                etag=fetched_page.etag,
+                last_modified=fetched_page.last_modified,
+                content_hash=content_hash,
+            )
+
+            log_event(
+                logger,
+                logging.INFO,
+                "fetch.root.compare_result",
+                service=self.service_name,
+                run_id=run_id,
+                page_id=page_id,
+                site_id=fetch_message["site_id"],
+                page_status=page_status,
+                comparison_method=comparison_method,
+            )
         html_s3_key = await self.html_storage.save_raw_html(
             run_id=run_id,
             page_id=page_id,
@@ -107,25 +139,98 @@ class FetcherCoreService:
             next_depth=next_depth,
             discovered_urls=fetched_page.discovered_urls,
         )
-        reserved_children = await self.repository.reserve_children(
-            run_id=run_id,
-            depth=next_depth,
-            render_mode=fetch_message["render_mode"],
-            discovered_urls=bounded_discovered_urls,
-        )
+
+        should_skip_children = is_root_page and page_status == PAGE_STATUS_UNCHANGED
+        if should_skip_children:
+            reserved_children = []
+            log_event(
+                logger,
+                logging.INFO,
+                "fetch.root.children_skipped_unchanged",
+                service=self.service_name,
+                run_id=run_id,
+                page_id=page_id,
+                site_id=fetch_message["site_id"],
+            )
+        else:
+            reserved_children = await self.repository.reserve_children(
+                run_id=run_id,
+                depth=next_depth,
+                render_mode=fetch_message["render_mode"],
+                discovered_urls=bounded_discovered_urls,
+            )
 
         await self.repository.finalize_page_success(
             page_id=page_id,
             html_s3_key=html_s3_key,
             http_status_code=fetched_page.http_status_code,
+            etag=fetched_page.etag,
+            last_modified=fetched_page.last_modified,
+            content_hash=content_hash,
+            page_status=page_status,
             metadata_json={
                 "child_links_discovered": len(fetched_page.discovered_urls),
                 "child_links_accepted": len(bounded_discovered_urls),
+                "comparison_method": comparison_method,
             },
         )
+
+        if is_root_page:
+            normalized_url = canonical_url(fetch_message["url"])
+            await self.repository.upsert_site_page_baseline(
+                site_id=fetch_message["site_id"],
+                normalized_url=normalized_url,
+                run_id=run_id,
+                html_s3_key=html_s3_key,
+                content_hash=content_hash,
+                etag=fetched_page.etag,
+                last_modified=fetched_page.last_modified,
+            )
+
         await self.repository.mark_page_completed(run_id=run_id)
         await self.repository.database_session.commit()
         return reserved_children
+
+    async def _classify_root_page_status(
+        self,
+        *,
+        site_id: str,
+        page_url: str,
+        etag: str | None,
+        last_modified: str | None,
+        content_hash: str,
+    ) -> tuple[str, str]:
+        baseline = await self.repository.get_site_page_baseline(
+            site_id=site_id,
+            normalized_url=canonical_url(page_url),
+        )
+        if baseline is None:
+            return PAGE_STATUS_NEW, "new"
+
+        if baseline.etag and etag:
+            status = (
+                PAGE_STATUS_UNCHANGED if baseline.etag == etag else PAGE_STATUS_CHANGED
+            )
+            return status, "etag"
+
+        if baseline.last_modified and last_modified:
+            status = (
+                PAGE_STATUS_UNCHANGED
+                if baseline.last_modified == last_modified
+                else PAGE_STATUS_CHANGED
+            )
+            return status, "last_modified"
+
+        status = (
+            PAGE_STATUS_UNCHANGED
+            if baseline.content_hash == content_hash
+            else PAGE_STATUS_CHANGED
+        )
+        return status, "content_hash"
+
+    def _compute_content_hash(self, html_content: str) -> str:
+        content_bytes = html_content.encode("utf-8")
+        return sha256(content_bytes).hexdigest()
 
     async def _compute_bounded_discovered_urls(
         self,
@@ -156,6 +261,7 @@ class FetcherCoreService:
                 "url": reserved_child.url,
                 "depth": next_depth,
                 "render_mode": fetch_message["render_mode"],
+                "trigger_reason": fetch_message["trigger_reason"],
             }
             await self.discoverable_publisher.publish_message(
                 topic_arn=self.discoverable_topic_arn,

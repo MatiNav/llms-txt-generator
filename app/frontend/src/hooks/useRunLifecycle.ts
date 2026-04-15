@@ -2,7 +2,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import {
   connectRunEvents,
-  fetchRunStatus,
   RunStatusResponse,
 } from "../api/client";
 
@@ -13,6 +12,7 @@ export type TimelineEvent = {
 };
 
 const terminalStages = new Set(["completed", "failed"]);
+const sseRotationIntervalMs = 105_000; // app runner server closes it at 120
 
 function createStableFingerprint(runStatus: RunStatusResponse): string {
   return JSON.stringify({
@@ -22,6 +22,7 @@ function createStableFingerprint(runStatus: RunStatusResponse): string {
     pagesDetected: runStatus.pages_detected,
     pagesQueued: runStatus.pages_queued,
     pagesCompleted: runStatus.pages_completed,
+    completedReason: runStatus.completed_reason,
     errorMessage: runStatus.error_message,
   });
 }
@@ -37,6 +38,7 @@ export function useRunLifecycle(activeRunId: string | null) {
   const [sseDisconnected, setSseDisconnected] = useState(false);
   const [lifecycleError, setLifecycleError] = useState<string | null>(null);
   const lastFingerprintRef = useRef<string | null>(null);
+  const reachedTerminalStageRef = useRef(false);
 
   useEffect(() => {
     setCurrentRunStatus(null);
@@ -44,16 +46,44 @@ export function useRunLifecycle(activeRunId: string | null) {
     setSseDisconnected(false);
     setLifecycleError(null);
     lastFingerprintRef.current = null;
+    reachedTerminalStageRef.current = false;
 
     if (activeRunId === null) {
       return;
     }
 
-    let isDisposed = false;
-    let pollingIntervalId: number | null = null;
-    const eventSource = connectRunEvents(activeRunId);
+    const runId = activeRunId;
 
-    function appendStatus(eventName: string, runStatus: RunStatusResponse): void {
+    let isDisposed = false;
+    let eventSource: EventSource | null = null;
+    let rotationIntervalId: number | null = null;
+    const eventNames = [
+      "run.discovering",
+      "run.fetch_progress",
+      "run.processing",
+      "run.llm_generation",
+      "run.completed",
+      "run.failed",
+    ];
+    let listeners: Array<{
+      eventName: string;
+      eventHandler: (messageEvent: MessageEvent<string>) => void;
+    }> = [];
+
+    function closeStream(): void {
+      if (eventSource === null) {
+        return;
+      }
+      listeners.forEach(({ eventName, eventHandler }) => {
+        eventSource?.removeEventListener(eventName, eventHandler);
+      });
+      listeners = [];
+      eventSource.onerror = null;
+      eventSource.close();
+      eventSource = null;
+    }
+
+    function upsertStatus(eventName: string, runStatus: RunStatusResponse): void {
       const statusFingerprint = createStableFingerprint(runStatus);
       if (statusFingerprint === lastFingerprintRef.current) {
         return;
@@ -61,14 +91,42 @@ export function useRunLifecycle(activeRunId: string | null) {
 
       lastFingerprintRef.current = statusFingerprint;
       setCurrentRunStatus(runStatus);
-      setTimelineEvents((previousTimelineEvents) => [
-        ...previousTimelineEvents,
-        {
-          eventName,
+      reachedTerminalStageRef.current = isTerminalStatus(runStatus);
+      setTimelineEvents((previousTimelineEvents) => {
+        if (eventName !== "run.fetch_progress") {
+          return [
+            ...previousTimelineEvents,
+            {
+              eventName,
+              timestamp: new Date().toISOString(),
+              payload: runStatus,
+            },
+          ];
+        }
+
+        const existingFetchTimelineIndex = previousTimelineEvents.findIndex(
+          (timelineEvent) => timelineEvent.eventName === "run.fetch_progress"
+        );
+
+        if (existingFetchTimelineIndex < 0) {
+          return [
+            ...previousTimelineEvents,
+            {
+              eventName,
+              timestamp: new Date().toISOString(),
+              payload: runStatus,
+            },
+          ];
+        }
+
+        const updatedTimelineEvents = [...previousTimelineEvents];
+        updatedTimelineEvents[existingFetchTimelineIndex] = {
+          ...updatedTimelineEvents[existingFetchTimelineIndex],
           timestamp: new Date().toISOString(),
           payload: runStatus,
-        },
-      ]);
+        };
+        return updatedTimelineEvents;
+      });
     }
 
     function handleTypedEvent(eventName: string) {
@@ -78,9 +136,9 @@ export function useRunLifecycle(activeRunId: string | null) {
         }
         try {
           const parsedPayload = JSON.parse(messageEvent.data) as RunStatusResponse;
-          appendStatus(eventName, parsedPayload);
+          upsertStatus(eventName, parsedPayload);
           if (isTerminalStatus(parsedPayload)) {
-            eventSource.close();
+            closeStream();
           }
         } catch {
           setLifecycleError("Failed to parse event stream payload");
@@ -88,56 +146,47 @@ export function useRunLifecycle(activeRunId: string | null) {
       };
     }
 
-    const eventNames = [
-      "run.discovering",
-      "run.fetch_progress",
-      "run.processing",
-      "run.llm_generation",
-      "run.completed",
-      "run.failed",
-    ];
-    const listeners = eventNames.map((eventName) => {
-      const eventHandler = handleTypedEvent(eventName);
-      eventSource.addEventListener(eventName, eventHandler);
-      return { eventName, eventHandler };
-    });
+    function openStream(): void {
+      closeStream();
+      eventSource = connectRunEvents(runId);
+      listeners = eventNames.map((eventName) => {
+        const eventHandler = handleTypedEvent(eventName);
+        eventSource?.addEventListener(eventName, eventHandler);
+        return { eventName, eventHandler };
+      });
 
-    eventSource.onerror = () => {
+      eventSource.onerror = () => {
+        if (isDisposed) {
+          return;
+        }
+
+        if (reachedTerminalStageRef.current) {
+          closeStream();
+          return;
+        }
+
+        openStream();
+      };
+    }
+
+    openStream();
+
+    rotationIntervalId = window.setInterval(() => {
       if (isDisposed) {
         return;
       }
-
-      setSseDisconnected(true);
-      eventSource.close();
-      if (pollingIntervalId !== null) {
+      if (reachedTerminalStageRef.current) {
         return;
       }
 
-      pollingIntervalId = window.setInterval(async () => {
-        if (isDisposed || activeRunId === null) {
-          return;
-        }
-        try {
-          const latestRunStatus = await fetchRunStatus(activeRunId);
-          appendStatus("run.polling", latestRunStatus);
-          if (isTerminalStatus(latestRunStatus) && pollingIntervalId !== null) {
-            window.clearInterval(pollingIntervalId);
-            pollingIntervalId = null;
-          }
-        } catch {
-          setLifecycleError("Failed to poll run status after stream disconnect");
-        }
-      }, 2000);
-    };
+      openStream();
+    }, sseRotationIntervalMs);
 
     return () => {
       isDisposed = true;
-      listeners.forEach(({ eventName, eventHandler }) => {
-        eventSource.removeEventListener(eventName, eventHandler);
-      });
-      eventSource.close();
-      if (pollingIntervalId !== null) {
-        window.clearInterval(pollingIntervalId);
+      closeStream();
+      if (rotationIntervalId !== null) {
+        window.clearInterval(rotationIntervalId);
       }
     };
   }, [activeRunId]);

@@ -2,6 +2,7 @@ from typing import TypedDict
 
 from shared.constants.render_mode import RenderModeValue
 from shared.constants.reservation_outcome import ReservationOutcomeValue
+from shared.constants.trigger_reason import TriggerReasonValue
 
 
 class DiscoverableMessage(TypedDict):
@@ -11,6 +12,7 @@ class DiscoverableMessage(TypedDict):
     url: str
     depth: int
     render_mode: RenderModeValue
+    trigger_reason: TriggerReasonValue
 
 
 class PageCompletedMessage(TypedDict):

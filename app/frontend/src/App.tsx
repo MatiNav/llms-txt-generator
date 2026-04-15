@@ -29,6 +29,26 @@ function formatStageLabel(stageName: string): string {
   }
 }
 
+function formatCompletedReasonLabel(completedReason: string | null): string {
+  if (completedReason === "unchanged_root") {
+    return "Completed — no root changes detected";
+  }
+  return "Completed — artifacts regenerated";
+}
+
+function formatTimelineStageLabel(
+  timelineEventName: string,
+  stageName: string,
+  pagesCompleted: number,
+  pagesQueued: number
+): string {
+  if (timelineEventName === "run.fetch_progress") {
+    return `Fetching pages (${pagesCompleted}/${pagesQueued})`;
+  }
+
+  return formatStageLabel(stageName);
+}
+
 export function App() {
   const [targetUrl, setTargetUrl] = useState("");
   const [renderMode, setRenderMode] = useState<RenderMode>("http");
@@ -181,6 +201,12 @@ export function App() {
                 <p>
                   <strong>Stage:</strong> {formatStageLabel(currentRunStatus.stage)}
                 </p>
+                {currentRunStatus.stage === "completed" && (
+                  <p>
+                    <strong>Outcome:</strong>{" "}
+                    {formatCompletedReasonLabel(currentRunStatus.completed_reason)}
+                  </p>
+                )}
                 <p>
                   <strong>Pages detected:</strong> {currentRunStatus.pages_detected}
                 </p>
@@ -208,7 +234,12 @@ export function App() {
                   <li key={`${timelineEvent.timestamp}-${eventIndex}`}>
                     <span className="timeline-event-name">{timelineEvent.eventName}</span>
                     <span className="timeline-event-stage">
-                      {formatStageLabel(timelineEvent.payload.stage)}
+                      {formatTimelineStageLabel(
+                        timelineEvent.eventName,
+                        timelineEvent.payload.stage,
+                        timelineEvent.payload.pages_completed,
+                        timelineEvent.payload.pages_queued
+                      )}
                     </span>
                     <span className="timeline-event-time">{timelineEvent.timestamp}</span>
                   </li>

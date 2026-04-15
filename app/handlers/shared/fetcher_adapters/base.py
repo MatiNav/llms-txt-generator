@@ -7,6 +7,8 @@ class FetchedPage:
     html_content: str
     http_status_code: int | None
     discovered_urls: list[str]
+    etag: str | None
+    last_modified: str | None
 
 
 class FetcherAdapter(Protocol):

@@ -1,13 +1,11 @@
-import asyncio
 import json
 import logging
 from typing import Any
 
 from handlers.lambdas.processing.runtime import build_processing_runtime
-from shared.db.engine import get_engine
-from shared.db.session import get_session_factory
+from handlers.shared.lambda_runtime.base_handler import BaseLambdaHandler
 from shared.constants.run_state import RUN_STATE_READY_FOR_LLM_GENERATION
-from shared.logging import configure_json_logging, log_decision, log_event
+from shared.logging import log_decision, log_event
 from shared.pipeline.llm_generation_message import (
     build_llm_generation_requested_message,
 )
@@ -15,62 +13,6 @@ from shared.pipeline.processing_message import parse_processing_requested_messag
 
 
 logger = logging.getLogger(__name__)
-
-
-async def _dispose_cached_db_resources() -> None:
-    if get_engine.cache_info().currsize > 0:
-        cached_engine = get_engine()
-        await cached_engine.dispose()
-
-    get_session_factory.cache_clear()
-    get_engine.cache_clear()
-
-
-async def _process_record(record: dict[str, Any], runtime) -> None:
-    message_id = str(record.get("messageId", ""))
-    raw_body = str(record.get("body", "{}"))
-    processing_message = _parse_processing_message(raw_body)
-    run_id = processing_message["run_id"]
-    site_id = processing_message["site_id"]
-
-    log_event(
-        logger,
-        logging.INFO,
-        "processing.record.received",
-        message_id=message_id,
-        run_id=run_id,
-        site_id=site_id,
-    )
-
-    processing_result = await runtime.processing_service.process_run(
-        run_id=run_id,
-        site_id=site_id,
-    )
-    await runtime.processing_service.repository.database_session.commit()
-
-    if not processing_result.should_publish_llm_generation:
-        log_decision(
-            logger,
-            decision_name="processing.skip_llm_generation_publish",
-            reason="run did not complete successfully in this processing attempt",
-            run_id=run_id,
-            site_id=site_id,
-            message_id=message_id,
-        )
-        await _republish_if_run_is_ready_for_llm_generation(
-            runtime=runtime,
-            run_id=run_id,
-            site_id=site_id,
-            message_id=message_id,
-        )
-        return
-
-    await _publish_llm_generation_message(
-        runtime=runtime,
-        run_id=run_id,
-        site_id=site_id,
-        message_id=message_id,
-    )
 
 
 async def _publish_llm_generation_message(
@@ -135,18 +77,23 @@ def _parse_processing_message(raw_body: str) -> dict[str, str]:
     return parse_processing_requested_message(parsed_payload)
 
 
-async def _process_batch(event: dict[str, Any]) -> dict[str, list[dict[str, str]]]:
-    runtime = build_processing_runtime()
-    batch_failures: list[dict[str, str]] = []
+class ProcessingLambdaHandler(BaseLambdaHandler):
+    def __init__(self) -> None:
+        self.runtime = None
 
-    try:
+    async def process(
+        self, event: dict[str, Any], context: Any
+    ) -> dict[str, list[dict[str, str]]]:
+        self.runtime = build_processing_runtime()
+        batch_failures: list[dict[str, str]] = []
+
         records = event.get("Records", [])
         for record in records:
             message_id = str(record.get("messageId", ""))
             try:
-                await _process_record(record, runtime)
+                await self._process_record(record=record, message_id=message_id)
             except Exception as processing_error:
-                await runtime.processing_service.repository.database_session.rollback()
+                await self.runtime.processing_service.repository.database_session.rollback()
                 log_event(
                     logger,
                     logging.ERROR,
@@ -156,13 +103,62 @@ async def _process_batch(event: dict[str, Any]) -> dict[str, list[dict[str, str]
                     error_message=str(processing_error)[:500],
                 )
                 batch_failures.append({"itemIdentifier": message_id})
-    finally:
-        await runtime.processing_service.repository.database_session.close()
-        await _dispose_cached_db_resources()
 
-    return {"batchItemFailures": batch_failures}
+        return {"batchItemFailures": batch_failures}
+
+    async def _process_record(self, *, record: dict[str, Any], message_id: str) -> None:
+        raw_body = str(record.get("body", "{}"))
+        processing_message = _parse_processing_message(raw_body)
+        run_id = processing_message["run_id"]
+        site_id = processing_message["site_id"]
+
+        log_event(
+            logger,
+            logging.INFO,
+            "processing.record.received",
+            message_id=message_id,
+            run_id=run_id,
+            site_id=site_id,
+        )
+
+        processing_result = await self.runtime.processing_service.process_run(
+            run_id=run_id,
+            site_id=site_id,
+        )
+        await self.runtime.processing_service.repository.database_session.commit()
+
+        if not processing_result.should_publish_llm_generation:
+            log_decision(
+                logger,
+                decision_name="processing.skip_llm_generation_publish",
+                reason="run did not complete successfully in this processing attempt",
+                run_id=run_id,
+                site_id=site_id,
+                message_id=message_id,
+            )
+            await _republish_if_run_is_ready_for_llm_generation(
+                runtime=self.runtime,
+                run_id=run_id,
+                site_id=site_id,
+                message_id=message_id,
+            )
+            return
+
+        await _publish_llm_generation_message(
+            runtime=self.runtime,
+            run_id=run_id,
+            site_id=site_id,
+            message_id=message_id,
+        )
+
+    async def cleanup(self) -> None:
+        if self.runtime is None:
+            return
+        await self.runtime.processing_service.repository.database_session.close()
+
+
+processing_lambda_handler = ProcessingLambdaHandler()
 
 
 def handler(event: dict[str, Any], context: Any) -> dict[str, list[dict[str, str]]]:
-    configure_json_logging()
-    return asyncio.run(_process_batch(event))
+    return processing_lambda_handler.run(event=event, context=context)

@@ -11,6 +11,7 @@ from components.llm_generator_service import LlmGeneratorService
 from components.orchestrator_service import OrchestratorService
 from components.processing_service import ProcessingService
 from components.raw_html_storage import RawHtmlStorage
+from components.site_refresher_service import SiteRefresherService
 from components.spa_fetcher_service import SpaFetcherService
 
 __all__ = [
@@ -27,5 +28,6 @@ __all__ = [
     "OrchestratorService",
     "ProcessingService",
     "RawHtmlStorage",
+    "SiteRefresherService",
     "SpaFetcherService",
 ]

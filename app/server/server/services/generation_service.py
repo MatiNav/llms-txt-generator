@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from server.errors.generation import InflightModeConflictError
 from server.repositories.generation_repository import GenerationRepository
 from shared.constants.render_mode import RenderModeValue
+from shared.constants.trigger_reason import TRIGGER_REASON_ON_DEMAND
 from shared.models.run import Run
 from shared.models.site import Site
 from shared.logging import log_event
@@ -153,6 +154,7 @@ class GenerationService:
                 "url": canonical_site_root_url,
                 "depth": 0,
                 "render_mode": requested_render_mode,
+                "trigger_reason": TRIGGER_REASON_ON_DEMAND,
             },
             request_id=request_id,
         )

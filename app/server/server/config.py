@@ -21,5 +21,5 @@ def get_server_settings() -> ServerSettings:
         discoverable_topic_arn=required_env_value("DISCOVERABLE_TOPIC_ARN"),
         frontend_origin=os.getenv("FRONTEND_ORIGIN", "http://localhost:5173"),
         generated_output_bucket_name=os.getenv("GENERATED_OUTPUT_BUCKET_NAME", ""),
-        download_url_ttl_seconds=int(os.getenv("DOWNLOAD_URL_TTL_SECONDS", "900")),
+        download_url_ttl_seconds=int(os.getenv("DOWNLOAD_URL_TTL_SECONDS", "60")),
     )

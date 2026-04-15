@@ -5,6 +5,8 @@ from uuid import UUID
 from sqlalchemy import Select, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from shared.constants.page_status import PAGE_STATUS_CHANGED, PAGE_STATUS_NEW
+from shared.constants.run_state import RUN_STATE_COMPLETED
 from shared.models.run import Run
 from shared.models.run_page import RunPage
 from shared.models.site import Site
@@ -20,6 +22,7 @@ class RunStatusSnapshot:
     pages_completed: int
     pages_detected: int
     root_fetch_status: str | None
+    root_page_status: str | None
     error_message: str | None
     updated_at: datetime
 
@@ -57,6 +60,14 @@ class RunRepository:
             .limit(1)
             .scalar_subquery()
         )
+        root_page_status_subquery = (
+            select(RunPage.page_status)
+            .where(RunPage.run_id == run_id)
+            .where(RunPage.depth == 0)
+            .order_by(RunPage.updated_at.desc())
+            .limit(1)
+            .scalar_subquery()
+        )
 
         snapshot_statement = (
             select(
@@ -68,10 +79,11 @@ class RunRepository:
                 Run.pages_completed,
                 detected_count_subquery,
                 root_fetch_status_subquery,
+                root_page_status_subquery,
                 Run.error_message,
                 Run.updated_at,
             )
-            .outerjoin(Site, Site.id == Run.site_id)
+            .join(Site, Site.id == Run.site_id)
             .where(Run.id == run_id)
             .limit(1)
         )
@@ -79,21 +91,18 @@ class RunRepository:
         if snapshot_row is None:
             return None
 
-        site_root_url = snapshot_row[2]
-        if site_root_url is None:
-            raise RuntimeError("Run exists but site record is missing")
-
         return RunStatusSnapshot(
             run_id=snapshot_row[0],
             site_id=snapshot_row[1],
-            site_root_url=site_root_url,
+            site_root_url=snapshot_row[2],
             run_state=snapshot_row[3],
             pages_queued=snapshot_row[4],
             pages_completed=snapshot_row[5],
             pages_detected=snapshot_row[6],
             root_fetch_status=snapshot_row[7],
-            error_message=snapshot_row[8],
-            updated_at=snapshot_row[9],
+            root_page_status=snapshot_row[8],
+            error_message=snapshot_row[9],
+            updated_at=snapshot_row[10],
         )
 
     async def list_sites(
@@ -114,3 +123,39 @@ class RunRepository:
             )
             for site_row in sites_rows
         ]
+
+    async def get_root_render_mode(self, run_id: UUID) -> str | None:
+        root_render_mode_statement = (
+            select(RunPage.render_mode)
+            .where(RunPage.run_id == run_id)
+            .where(RunPage.depth == 0)
+            .order_by(RunPage.updated_at.desc())
+            .limit(1)
+        )
+        root_render_mode_result = await self.database_session.execute(
+            root_render_mode_statement
+        )
+        root_render_mode = root_render_mode_result.scalar_one_or_none()
+        if root_render_mode is None:
+            return None
+        return str(root_render_mode)
+
+    async def find_latest_completed_source_run_id(
+        self,
+        *,
+        site_id: UUID,
+        render_mode: str,
+    ) -> UUID | None:
+        source_run_statement = (
+            select(Run.id)
+            .join(RunPage, RunPage.run_id == Run.id)
+            .where(Run.site_id == site_id)
+            .where(Run.state == RUN_STATE_COMPLETED)
+            .where(RunPage.depth == 0)
+            .where(RunPage.render_mode == render_mode)
+            .where(RunPage.page_status.in_([PAGE_STATUS_NEW, PAGE_STATUS_CHANGED]))
+            .order_by(Run.completed_at.desc().nullslast(), Run.created_at.desc())
+            .limit(1)
+        )
+        source_run_result = await self.database_session.execute(source_run_statement)
+        return source_run_result.scalar_one_or_none()

@@ -12,6 +12,10 @@ from orchestrator.services.processing_completion_service import (
 )
 from shared.db.session import get_session_factory
 from shared.constants.render_mode import ALLOWED_RENDER_MODES
+from shared.constants.trigger_reason import (
+    TRIGGER_REASON_CRON,
+    TRIGGER_REASON_ON_DEMAND,
+)
 from shared.logging import log_event
 from shared.queue.sns_client import SNSClient
 from shared.queue.sqs_client import SQSClient
@@ -27,9 +31,13 @@ def parse_discoverable_message(raw_payload: dict[str, Any]) -> DiscoverableMessa
     page_url = str(raw_payload["url"])
     page_depth = int(raw_payload["depth"])
     render_mode = str(raw_payload["render_mode"]).strip().lower()
+    trigger_reason = str(raw_payload["trigger_reason"]).strip().lower()
     if render_mode not in ALLOWED_RENDER_MODES:
         supported_modes = ", ".join(ALLOWED_RENDER_MODES)
         raise ValueError(f"render_mode must be one of: {supported_modes}")
+
+    if trigger_reason not in {TRIGGER_REASON_ON_DEMAND, TRIGGER_REASON_CRON}:
+        raise ValueError("trigger_reason must be one of: cron, on_demand")
 
     return {
         "run_id": run_id,
@@ -38,6 +46,7 @@ def parse_discoverable_message(raw_payload: dict[str, Any]) -> DiscoverableMessa
         "url": page_url,
         "depth": page_depth,
         "render_mode": render_mode,
+        "trigger_reason": trigger_reason,
     }
 
 
@@ -62,6 +71,7 @@ async def process_discoverable_message(
     page_url = discoverable_message["url"]
     page_depth = discoverable_message["depth"]
     render_mode = discoverable_message["render_mode"]
+    trigger_reason = discoverable_message["trigger_reason"]
 
     log_event(
         logger,
@@ -75,12 +85,14 @@ async def process_discoverable_message(
         url=page_url,
         depth=page_depth,
         render_mode=render_mode,
+        trigger_reason=trigger_reason,
     )
 
     await publish_route_message(
         routing_topic_client=routing_topic_client,
         fetch_topic_arn=fetch_topic_arn,
         render_mode=render_mode,
+        trigger_reason=trigger_reason,
         run_id=run_id,
         page_id=page_id,
         site_id=site_id,
