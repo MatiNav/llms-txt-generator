@@ -94,11 +94,21 @@ export function useRunLifecycle(activeRunId: string | null) {
       reachedTerminalStageRef.current = isTerminalStatus(runStatus);
       setTimelineEvents((previousTimelineEvents) => {
         if (eventName !== "run.fetch_progress") {
+          const newTimestamp = new Date().toISOString();
           return [
-            ...previousTimelineEvents,
+            ...previousTimelineEvents.map((timelineEvent) =>
+              timelineEvent.eventName === "run.fetch_progress" &&
+              runStatus.pages_completed > timelineEvent.payload.pages_completed
+                ? {
+                    ...timelineEvent,
+                    timestamp: newTimestamp,
+                    payload: runStatus,
+                  }
+                : timelineEvent
+            ),
             {
               eventName,
-              timestamp: new Date().toISOString(),
+              timestamp: newTimestamp,
               payload: runStatus,
             },
           ];
