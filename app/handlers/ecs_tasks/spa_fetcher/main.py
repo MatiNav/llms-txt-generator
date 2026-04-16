@@ -27,9 +27,47 @@ async def process_raw_message(
     if fetch_message["render_mode"] != RENDER_MODE_SPA:
         raise ValueError("SPA fetcher received non-spa render_mode message")
 
-    await runtime.fetcher_core.process(
-        fetch_message=fetch_message,
-        fetcher_adapter=runtime.fetcher_adapter,
+    log_event(
+        logger,
+        logging.INFO,
+        "spa_fetcher.message.received",
+        run_id=fetch_message["run_id"],
+        page_id=fetch_message["page_id"],
+        site_id=fetch_message["site_id"],
+        page_url=fetch_message["url"],
+        page_depth=fetch_message["depth"],
+        receipt_handle_present=bool(receipt_handle),
+    )
+
+    try:
+        await runtime.fetcher_core.process(
+            fetch_message=fetch_message,
+            fetcher_adapter=runtime.fetcher_adapter,
+        )
+    except Exception as message_error:
+        log_event(
+            logger,
+            logging.ERROR,
+            "spa_fetcher.message.failed",
+            run_id=fetch_message["run_id"],
+            page_id=fetch_message["page_id"],
+            site_id=fetch_message["site_id"],
+            page_url=fetch_message["url"],
+            page_depth=fetch_message["depth"],
+            error_type=type(message_error).__name__,
+            error_message=str(message_error)[:500],
+        )
+        raise
+
+    log_event(
+        logger,
+        logging.INFO,
+        "spa_fetcher.message.completed",
+        run_id=fetch_message["run_id"],
+        page_id=fetch_message["page_id"],
+        site_id=fetch_message["site_id"],
+        page_url=fetch_message["url"],
+        page_depth=fetch_message["depth"],
     )
 
     if receipt_handle:
@@ -47,6 +85,13 @@ async def main_async() -> None:
             )
             if not raw_messages:
                 continue
+
+            log_event(
+                logger,
+                logging.INFO,
+                "spa_fetcher.batch.received",
+                batch_size=len(raw_messages),
+            )
 
             # The runtime currently holds a shared SQLAlchemy AsyncSession.
             # Processing messages concurrently causes session state conflicts.

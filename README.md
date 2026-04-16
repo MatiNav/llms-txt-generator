@@ -1,109 +1,98 @@
-# llms.txt Generator
+# llms.txt Generator (Challenge V3)
 
-Distributed pipeline that crawls websites and generates [llms.txt](https://llmstxt.org/) files -- structured metadata that helps LLMs understand site content.
+Implementation for the **Automated `llms.txt` Generator** challenge described in:
 
-## Architecture
+- `LLMs.txt-Generator-Version3.md`
 
-Target architecture for the distributed pipeline on AWS:
+This system crawls websites, generates `llms.txt` artifacts, and keeps sites refreshable through a distributed AWS pipeline.
 
-- **FastAPI server** (App Runner) -- API + SSE for real-time progress
-- **Orchestrator** (ECS Fargate) -- URL dedup, robots.txt, fetch routing
-- **HTTP fetcher** (Lambda) -- fast-path page fetching
-- **Playwright fetcher** (ECS Fargate) -- JS-rendered page fetching
-- **Processing pipeline** (Lambda) -- content extraction and llms.txt generation
-- **PostgreSQL** (RDS) -- persistent state for sites, runs, and pages
-- **SQS queues** -- decoupled message routing between stages
-- **S3** -- HTML artifact and output storage
+## Demo / Walkthrough
 
-## Current Status
+- Loom video (challenge explanation): https://www.loom.com/share/16e4c0b2033844c89718de3d43bd5457
 
-Implemented now:
-- Shared package (`app/shared`) with SQLAlchemy models, async DB layer, and Alembic migrations
-- FastAPI server (`app/server`) with startup migrations, structured logging, health endpoint, and `POST /api/generate` coalescing behavior
-- Integration/E2E-style tests for generate flow under `app/server/tests/e2e`
-- CDK infra scaffold (`infra/`) with:
-  - discoverable queue + DLQ
-  - App Runner runtime IAM role with `sqs:SendMessage`
-  - App Runner runtime stack wiring for server container + env injection (`AWS_REGION`, `DISCOVERABLE_QUEUE_URL`, `DATABASE_URL`)
-  - Challenge-mode RDS PostgreSQL in public subnets for full endpoint validation
+---
 
-Still pending:
-- Worker runtimes (orchestrator, fetchers, processing)
-- Read APIs and SSE stream endpoints
-- Full infra rollout and production hardening
+## What this repo contains
 
-## Project Structure
+- **Frontend** (`app/frontend`): React + Vite UI
+- **API** (`app/server`): FastAPI + SSE endpoints
+- **Workers** (`app/handlers`):
+  - Orchestrator (ECS Fargate)
+  - HTTP fetcher (Lambda)
+  - SPA/Playwright fetcher (ECS Fargate)
+  - Processing (Lambda)
+  - LLM generator (Lambda)
+  - Site refresher cron handler (Lambda)
+- **Shared package** (`app/shared`): models, DB, pipeline types/utilities
+- **Infrastructure** (`infra`): AWS CDK stack for runtime + data + hosting
 
-```
-app/
-  shared/           Shared Python package (models, DB, pipeline)
-    shared/
-      models/       SQLAlchemy 2.0 models (Site, Run, RunPage, SitePage)
-      db/           Async engine, session factory, migration runner
-      logging.py    Shared structured JSON logging utility
-      queue/        SQS client wrapper
-      pipeline/     Pure functions ported from POC (planned)
-      storage/      S3 client (planned)
-    migrations/     Alembic async migrations
-  server/           FastAPI server (implemented: health + generate + coalescing)
-  handlers/         Lambda + ECS task handlers (planned)
-infra/              CDK infrastructure (implemented baseline + server runtime wiring)
-```
+---
 
-## Tech Stack
+## Architecture (high level)
 
-- Python 3.12
-- SQLAlchemy 2.0 (async, declarative `mapped_column` style)
-- asyncpg (PostgreSQL async driver)
-- Alembic (async migrations)
-- FastAPI + Pydantic v2
-- aioboto3 (async AWS SDK)
-- AWS CDK (Python)
+- **Frontend**: CloudFront + S3
+- **API**: App Runner
+- **Messaging**: SNS + SQS queues (discoverable/fetch/processing/llm)
+- **Compute**: ECS Fargate + Lambda
+- **Data**: RDS PostgreSQL + S3 (raw html + generated outputs)
+- **External**: OpenAI API for enrichment phase
 
-## Local Development
+![Infrastructure Design](./infra-design.png)
 
-### Prerequisites
+---
 
-- Python 3.12+
-- [uv](https://docs.astral.sh/uv/) (package manager)
+## Prerequisites
+
+### Local tooling
+
+- Python **3.12+**
+- [uv](https://docs.astral.sh/uv/)
+- Node.js **20+** and npm
 - Docker
 
-### Database
+### AWS tooling
 
-Start the local PostgreSQL instance:
+- AWS account + credentials configured locally
+- AWS CDK v2 CLI (`cdk --version`)
+- Route53 hosted zone for your root domain (if deploying custom domains)
+
+---
+
+## Local setup
+
+Run all commands from repo root: `llms-txt-generator/`.
+
+### 1) Start local Postgres
 
 ```bash
 docker compose -f docker-compose.local.yml up -d
 ```
 
-Create a `.env.local` file:
-
-```
-DATABASE_URL=postgresql+asyncpg://llmstxt:llmstxt@localhost:5432/llmstxt
-```
-
-### Install shared package
+### 2) Create Python environment and install packages
 
 ```bash
 uv venv --python 3.12
 source .venv/bin/activate
 uv pip install -e ./app/shared
-```
-
-### Run API server
-
-Install server package:
-
-```bash
 uv pip install -e ./app/server
 ```
 
-Set required env vars:
+### 3) Run DB migrations
+
+```bash
+DATABASE_URL="postgresql+asyncpg://llmstxt:llmstxt@localhost:5432/llmstxt" \
+alembic -c app/shared/migrations/alembic.ini upgrade head
+```
+
+### 4) Run API server
+
+Required environment variables:
 
 ```bash
 export DATABASE_URL="postgresql+asyncpg://llmstxt:llmstxt@localhost:5432/llmstxt"
 export AWS_REGION="us-east-1"
-export DISCOVERABLE_QUEUE_URL="https://sqs.us-east-1.amazonaws.com/123456789012/llmstxt-discoverable"
+export DISCOVERABLE_TOPIC_ARN="arn:aws:sns:us-east-1:123456789012/llmstxt-discoverable-events"
+export FRONTEND_ORIGIN="http://localhost:5173"
 ```
 
 Start server:
@@ -112,66 +101,115 @@ Start server:
 uvicorn server.main:app --app-dir app/server --reload --port 8000
 ```
 
-Example request:
+> Note: `POST /api/generate` publishes to SNS. For full end-to-end local behavior you need valid AWS credentials and real AWS resources.
+
+### 5) Run frontend locally
+
+```bash
+cd app/frontend
+npm install
+cp .env.example .env
+npm run dev
+```
+
+Frontend default: `http://localhost:5173`.
+
+---
+
+## API quick smoke checks
+
+```bash
+curl http://localhost:8000/health
+```
 
 ```bash
 curl -X POST http://localhost:8000/api/generate \
   -H "content-type: application/json" \
-  -d '{"url":"https://example.com/docs"}'
+  -d '{"url":"https://example.com","render_mode":"http"}'
 ```
 
-### Run migrations
+Run status and download endpoints:
 
-Apply migrations against the local database:
+- `GET /api/runs/{run_id}`
+- `GET /api/runs/{run_id}/events` (SSE)
+- `GET /api/runs/{run_id}/downloads`
+
+---
+
+## Deploy to AWS (CDK)
+
+### 1) Configure deployment values
+
+Before deploy, review and adjust domain values in:
+
+- `infra/stacks/llm_txt_generator_stack.py`
+
+Current values are hardcoded (`root_domain_name`, frontend/api subdomains), so make sure they match your hosted zone.
+
+### 2) Export required deploy env vars
+
+`OPENAI_API_KEY` is required at synth/deploy time by the stack.
 
 ```bash
-DATABASE_URL="postgresql+asyncpg://llmstxt:llmstxt@localhost:5432/llmstxt" \
-  alembic -c app/shared/migrations/alembic.ini upgrade head
+export OPENAI_API_KEY="<your-openai-api-key>"
+export OPENAI_MODEL_NAME="gpt-4.1-mini" # optional override
 ```
 
-Verify tables exist:
+### 3) Build frontend artifacts (used by infra deploy)
 
 ```bash
-docker exec llmstxt-db psql -U llmstxt -d llmstxt -c "\dt"
+cd app/frontend
+npm install
+npm run build
+cd ../..
 ```
 
-Expected output: `sites`, `runs`, `run_pages`, `site_pages`, `alembic_version`.
-
-### Generate a new migration
-
-After changing models, autogenerate the migration diff:
+### 4) Install infra deps and bootstrap
 
 ```bash
-DATABASE_URL="postgresql+asyncpg://llmstxt:llmstxt@localhost:5432/llmstxt" \
-  alembic -c app/shared/migrations/alembic.ini revision --autogenerate -m "description"
+cd infra
+uv venv --python 3.12
+source .venv/bin/activate
+uv pip install -r requirements.txt
+cdk bootstrap aws://<ACCOUNT_ID>/<REGION>
 ```
 
-### Run server tests
+### 5) Synthesize and deploy
 
 ```bash
-uv pip install -e ./app/server[test]
-DATABASE_URL="postgresql+asyncpg://llmstxt:llmstxt@localhost:5432/llmstxt" \
-  AWS_REGION="us-east-1" \
-  DISCOVERABLE_QUEUE_URL="https://sqs.us-east-1.amazonaws.com/123456789012/llmstxt-discoverable" \
-  pytest app/server/tests/e2e -q
-```
-
-### Infra synth/deploy
-
-```bash
-uv pip install -r infra/requirements.txt
 cd infra
 cdk synth
-cdk deploy LlmTxtGeneratorStack --require-approval never
+cdk deploy LlmTxtGeneratorStack \
+  -c account=<ACCOUNT_ID> \
+  -c region=<REGION> \
+  --require-approval never
 ```
 
-## Database Schema
+After deploy, use stack outputs for:
 
-Four core tables:
+- Frontend public URL
+- API public URL
+- Queue and bucket names
+- DB secret ARN
 
-| Table | Purpose |
-|-------|---------|
-| `sites` | Canonical site identity (root URL, normalized host) |
-| `runs` | Run lifecycle (state machine, completion counters, output keys) |
-| `run_pages` | Per-run URL tracking, fetch status, change detection |
-| `site_pages` | Cross-run page memory (hash, etag, metadata) |
+---
+
+## Operational notes (challenge mode)
+
+- Infrastructure favors challenge simplicity over production hardening.
+- Networking and DB posture are challenge-oriented and should be tightened for production.
+
+---
+
+## Project structure
+
+```text
+app/
+  frontend/     React + Vite app
+  server/       FastAPI API and SSE endpoints
+  handlers/     Lambda/ECS worker handlers
+  shared/       Shared models, DB, queue and pipeline utilities
+infra/
+  components/   CDK constructs for each runtime/resource
+  stacks/       Main stack composition + outputs
+```
