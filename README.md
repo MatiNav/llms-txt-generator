@@ -6,6 +6,10 @@ Implementation for the **Automated `llms.txt` Generator** challenge described in
 
 This system crawls websites, generates `llms.txt` artifacts, and keeps sites refreshable through a distributed AWS pipeline.
 
+Live app: https://profound.matiasnavarrodev.com/
+
+## Architecture
+
 ## Demo / Walkthrough
 
 - Loom video (challenge explanation): https://www.loom.com/share/16e4c0b2033844c89718de3d43bd5457
