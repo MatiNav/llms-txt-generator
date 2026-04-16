@@ -66,7 +66,6 @@ class ProcessingService:
 
         queue_is_consistent = await self._enforce_queue_consistency(
             run_id=run_id,
-            site_id=site_id,
             decision_context=decision_context,
         )
         if not queue_is_consistent:
@@ -84,7 +83,6 @@ class ProcessingService:
         if not eligible_pages:
             await self._fail_run_for_no_eligible_pages(
                 run_id=run_id,
-                site_id=site_id,
                 fetched_page_count=len(fetched_pages),
                 extracted_page_count=len(processed_pages),
                 decision_context=decision_context,
@@ -184,7 +182,6 @@ class ProcessingService:
         self,
         *,
         run_id: str,
-        site_id: str,
         decision_context: dict[str, str],
     ) -> bool:
         queued_pages_count = await self.repository.queued_pages_count(run_id)
@@ -208,7 +205,6 @@ class ProcessingService:
         self,
         *,
         run_id: str,
-        site_id: str,
         fetched_page_count: int,
         extracted_page_count: int,
         decision_context: dict[str, str],

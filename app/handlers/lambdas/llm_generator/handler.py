@@ -1,4 +1,3 @@
-import json
 import logging
 from typing import Any
 
@@ -12,6 +11,7 @@ from shared.logging import log_event
 from shared.pipeline.llm_generation_message import (
     parse_llm_generation_requested_message,
 )
+from shared.pipeline.json_payload import parse_json_object_payload
 
 
 logger = logging.getLogger(__name__)
@@ -52,9 +52,7 @@ class LlmGeneratorLambdaHandler(BaseLambdaHandler):
 
     async def _process_record(self, *, record: dict[str, Any], message_id: str) -> None:
         raw_body = str(record.get("body", "{}"))
-        payload = json.loads(raw_body)
-        if not isinstance(payload, dict):
-            raise ValueError("SQS message body must be a JSON object")
+        payload = parse_json_object_payload(raw_body)
 
         message = parse_llm_generation_requested_message(payload)
         run_id = message["run_id"]

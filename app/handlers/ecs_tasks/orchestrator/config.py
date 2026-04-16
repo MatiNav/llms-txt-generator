@@ -4,7 +4,6 @@ from shared.config.env import required_env_value
 
 
 SERVICE_NAME = "orchestrator"
-DISCOVERING_STATE = "discovering"
 
 
 @dataclass(frozen=True)

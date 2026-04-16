@@ -1,4 +1,3 @@
-import json
 import logging
 from typing import Any
 
@@ -7,15 +6,14 @@ from handlers.shared.lambda_runtime.base_handler import BaseLambdaHandler
 from shared.constants.render_mode import RENDER_MODE_HTTP
 from shared.logging import log_event
 from shared.pipeline.fetch_message import parse_fetch_requested_message
+from shared.pipeline.json_payload import parse_json_object_payload
 
 
 logger = logging.getLogger(__name__)
 
 
 async def _process_record_body(raw_body: str, runtime) -> None:
-    parsed_payload = json.loads(raw_body)
-    if not isinstance(parsed_payload, dict):
-        raise ValueError("SQS message body must be a JSON object")
+    parsed_payload = parse_json_object_payload(raw_body)
 
     fetch_message = parse_fetch_requested_message(parsed_payload)
     if fetch_message["render_mode"] != RENDER_MODE_HTTP:

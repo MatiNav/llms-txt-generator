@@ -165,7 +165,6 @@ class FetcherRepository:
                 last_modified=last_modified,
                 last_html_s3_key=html_s3_key,
                 last_seen_run_id=run_id,
-                is_active=True,
             )
             .on_conflict_do_update(
                 constraint="uq_site_page_url",
@@ -175,7 +174,6 @@ class FetcherRepository:
                     "last_modified": last_modified,
                     "last_html_s3_key": html_s3_key,
                     "last_seen_run_id": run_id,
-                    "is_active": True,
                     "updated_at": func.now(),
                 },
             )
@@ -235,9 +233,3 @@ class FetcherRepository:
             .where(Run.state == RUN_STATE_DISCOVERING)
             .values(pages_completed=Run.pages_completed + 1)
         )
-
-    async def get_run_site_id(self, run_id: str) -> str:
-        site_statement = select(Run.site_id).where(Run.id == run_id).limit(1)
-        site_result = await self.database_session.execute(site_statement)
-        site_id = site_result.scalar_one()
-        return str(site_id)

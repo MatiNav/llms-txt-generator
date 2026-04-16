@@ -1,18 +1,10 @@
 from typing import TypedDict
 
-from shared.constants.render_mode import RenderModeValue
 from shared.constants.reservation_outcome import ReservationOutcomeValue
-from shared.constants.trigger_reason import TriggerReasonValue
+from shared.pipeline.fetch_message import FetchRequestedMessage
 
 
-class DiscoverableMessage(TypedDict):
-    run_id: str
-    page_id: str
-    site_id: str
-    url: str
-    depth: int
-    render_mode: RenderModeValue
-    trigger_reason: TriggerReasonValue
+DiscoverableMessage = FetchRequestedMessage
 
 
 class PageCompletedMessage(TypedDict):

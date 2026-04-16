@@ -1,4 +1,3 @@
-import json
 import logging
 from typing import Any
 
@@ -11,11 +10,8 @@ from orchestrator.services.processing_completion_service import (
     try_emit_processing_requested,
 )
 from shared.db.session import get_session_factory
-from shared.constants.render_mode import ALLOWED_RENDER_MODES
-from shared.constants.trigger_reason import (
-    TRIGGER_REASON_CRON,
-    TRIGGER_REASON_ON_DEMAND,
-)
+from shared.pipeline.fetch_message import parse_fetch_requested_message
+from shared.pipeline.json_payload import parse_json_object_payload
 from shared.logging import log_event
 from shared.queue.sns_client import SNSClient
 from shared.queue.sqs_client import SQSClient
@@ -25,29 +21,7 @@ logger = logging.getLogger(__name__)
 
 
 def parse_discoverable_message(raw_payload: dict[str, Any]) -> DiscoverableMessage:
-    run_id = str(raw_payload["run_id"])
-    page_id = str(raw_payload["page_id"])
-    site_id = str(raw_payload["site_id"])
-    page_url = str(raw_payload["url"])
-    page_depth = int(raw_payload["depth"])
-    render_mode = str(raw_payload["render_mode"]).strip().lower()
-    trigger_reason = str(raw_payload["trigger_reason"]).strip().lower()
-    if render_mode not in ALLOWED_RENDER_MODES:
-        supported_modes = ", ".join(ALLOWED_RENDER_MODES)
-        raise ValueError(f"render_mode must be one of: {supported_modes}")
-
-    if trigger_reason not in {TRIGGER_REASON_ON_DEMAND, TRIGGER_REASON_CRON}:
-        raise ValueError("trigger_reason must be one of: cron, on_demand")
-
-    return {
-        "run_id": run_id,
-        "page_id": page_id,
-        "site_id": site_id,
-        "url": page_url,
-        "depth": page_depth,
-        "render_mode": render_mode,
-        "trigger_reason": trigger_reason,
-    }
+    return parse_fetch_requested_message(raw_payload)
 
 
 def parse_page_completed_message(raw_payload: dict[str, Any]) -> PageCompletedMessage:
@@ -64,7 +38,7 @@ async def process_discoverable_message(
     processing_topic_client: SNSClient,
     fetch_topic_arn: str,
     processing_topic_arn: str,
-) -> bool:
+) -> None:
     run_id = discoverable_message["run_id"]
     page_id = discoverable_message["page_id"]
     site_id = discoverable_message["site_id"]
@@ -126,14 +100,12 @@ async def process_discoverable_message(
             page_id=page_id,
         )
 
-    return True
-
 
 async def process_page_completed_message(
     page_completed_message: PageCompletedMessage,
     processing_topic_client: SNSClient,
     processing_topic_arn: str,
-) -> bool:
+) -> None:
     run_id = page_completed_message["run_id"]
     page_id = page_completed_message["page_id"]
     site_id = page_completed_message["site_id"]
@@ -160,8 +132,6 @@ async def process_page_completed_message(
             page_id=page_id,
         )
 
-    return True
-
 
 async def handle_raw_message(
     raw_message: dict[str, Any],
@@ -174,21 +144,19 @@ async def handle_raw_message(
     receipt_handle = raw_message.get("ReceiptHandle")
     try:
         message_body = raw_message.get("Body", "{}")
-        parsed_payload = json.loads(message_body)
-        if not isinstance(parsed_payload, dict):
-            raise ValueError("SQS message body must be a JSON object")
+        parsed_payload = parse_json_object_payload(message_body)
 
         event_type = str(parsed_payload.get("event_type", "discoverable"))
         if event_type == "page_completed":
             page_completed_message = parse_page_completed_message(parsed_payload)
-            processed_successfully = await process_page_completed_message(
+            await process_page_completed_message(
                 page_completed_message=page_completed_message,
                 processing_topic_client=processing_topic_client,
                 processing_topic_arn=processing_topic_arn,
             )
         else:
             discoverable_message = parse_discoverable_message(parsed_payload)
-            processed_successfully = await process_discoverable_message(
+            await process_discoverable_message(
                 discoverable_message=discoverable_message,
                 routing_topic_client=routing_topic_client,
                 processing_topic_client=processing_topic_client,
@@ -196,7 +164,7 @@ async def handle_raw_message(
                 processing_topic_arn=processing_topic_arn,
             )
 
-        if processed_successfully and receipt_handle:
+        if receipt_handle:
             await discoverable_queue_client.delete_message(
                 receipt_handle=receipt_handle
             )

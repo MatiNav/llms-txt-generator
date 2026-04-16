@@ -88,8 +88,6 @@ class LlmGeneratorService:
                 run_id=run_id, site_id=site_id, error=processing_error
             )
             raise
-        except Exception:
-            raise
 
     async def _load_run_context(
         self,

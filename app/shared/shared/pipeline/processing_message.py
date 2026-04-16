@@ -1,9 +1,13 @@
-from typing import Any, TypedDict
+from typing import Any
+
+from shared.pipeline.run_site_message import (
+    RunSiteMessage,
+    build_run_site_message,
+    parse_run_site_message,
+)
 
 
-class ProcessingRequestedMessage(TypedDict):
-    run_id: str
-    site_id: str
+ProcessingRequestedMessage = RunSiteMessage
 
 
 def build_processing_requested_message(
@@ -11,16 +15,10 @@ def build_processing_requested_message(
     run_id: str,
     site_id: str,
 ) -> ProcessingRequestedMessage:
-    return {
-        "run_id": str(run_id),
-        "site_id": str(site_id),
-    }
+    return build_run_site_message(run_id=run_id, site_id=site_id)
 
 
 def parse_processing_requested_message(
     raw_payload: dict[str, Any],
 ) -> ProcessingRequestedMessage:
-    return {
-        "run_id": str(raw_payload["run_id"]),
-        "site_id": str(raw_payload["site_id"]),
-    }
+    return parse_run_site_message(raw_payload)
