@@ -47,6 +47,14 @@ class SpaFetcherAdapter:
         self.navigation_timeout_ms = navigation_timeout_ms
 
     async def fetch_page(self, target_url: str) -> FetchedPage:
+        log_event(
+            logger,
+            logging.INFO,
+            "spa.fetch.start",
+            target_url=target_url,
+            navigation_timeout_ms=self.navigation_timeout_ms,
+        )
+
         async with async_playwright() as playwright_runtime:
             browser = await playwright_runtime.chromium.launch(headless=True)
             browser_context = await browser.new_context()
@@ -57,10 +65,66 @@ class SpaFetcherAdapter:
                 wait_until="networkidle",
                 timeout=self.navigation_timeout_ms,
             )
-            html_content = await browser_page.content()
+            log_event(
+                logger,
+                logging.INFO,
+                "spa.fetch.goto.completed",
+                target_url=target_url,
+                has_response=response is not None,
+                status_code=None if response is None else response.status,
+            )
 
+            html_content = await browser_page.content()
+            log_event(
+                logger,
+                logging.INFO,
+                "spa.fetch.content.collected",
+                target_url=target_url,
+                html_length=len(html_content),
+            )
+
+            response_headers: dict[str, str] = {}
+            if response is not None:
+                log_event(
+                    logger,
+                    logging.INFO,
+                    "spa.fetch.headers.read.start",
+                    target_url=target_url,
+                )
+                try:
+                    response_headers = await response.all_headers()
+                    log_event(
+                        logger,
+                        logging.INFO,
+                        "spa.fetch.headers.read.completed",
+                        target_url=target_url,
+                        header_count=len(response_headers),
+                    )
+                except Exception as header_error:
+                    log_event(
+                        logger,
+                        logging.ERROR,
+                        "spa.fetch.headers.read.failed",
+                        target_url=target_url,
+                        error_type=type(header_error).__name__,
+                        error_message=str(header_error)[:500],
+                    )
+                    raise
+
+            log_event(
+                logger,
+                logging.INFO,
+                "spa.fetch.browser.closing",
+                target_url=target_url,
+            )
             await browser_context.close()
             await browser.close()
+            log_event(
+                logger,
+                logging.INFO,
+                "spa.fetch.browser.closed",
+                target_url=target_url,
+            )
 
         discovered_urls = extract_links_from_html(
             base_url=target_url,
@@ -68,9 +132,15 @@ class SpaFetcherAdapter:
         )
         accepted_urls = filter_spa_links(discovered_urls)
         status_code = None if response is None else response.status
-        response_headers: dict[str, str] = {}
-        if response is not None:
-            response_headers = await response.all_headers()
+
+        log_event(
+            logger,
+            logging.INFO,
+            "spa.fetch.links.extracted",
+            target_url=target_url,
+            discovered_count=len(discovered_urls),
+            accepted_count=len(accepted_urls),
+        )
 
         return FetchedPage(
             html_content=html_content,

@@ -48,6 +48,19 @@ class FetcherCoreService:
             return
 
         try:
+            log_event(
+                logger,
+                logging.INFO,
+                "fetch.page.processing.start",
+                service=self.service_name,
+                run_id=run_id,
+                page_id=page_id,
+                site_id=fetch_message["site_id"],
+                page_url=fetch_message["url"],
+                page_depth=fetch_message["depth"],
+                render_mode=fetch_message["render_mode"],
+            )
+
             next_depth = fetch_message["depth"] + 1
             reserved_children = await self._fetch_finalize_and_reserve_children(
                 fetch_message=fetch_message,
@@ -61,12 +74,40 @@ class FetcherCoreService:
                 page_id=page_id,
                 site_id=fetch_message["site_id"],
             )
+
+            log_event(
+                logger,
+                logging.INFO,
+                "fetch.page.processing.completed",
+                service=self.service_name,
+                run_id=run_id,
+                page_id=page_id,
+                site_id=fetch_message["site_id"],
+                page_url=fetch_message["url"],
+                page_depth=fetch_message["depth"],
+                reserved_children_count=len(reserved_children),
+            )
+
             await self._publish_reserved_children(
                 fetch_message=fetch_message,
                 next_depth=next_depth,
                 reserved_children=reserved_children,
             )
         except Exception as processing_error:
+            log_event(
+                logger,
+                logging.ERROR,
+                "fetch.page.processing.failed",
+                service=self.service_name,
+                run_id=run_id,
+                page_id=page_id,
+                site_id=fetch_message["site_id"],
+                page_url=fetch_message["url"],
+                page_depth=fetch_message["depth"],
+                render_mode=fetch_message["render_mode"],
+                error_type=type(processing_error).__name__,
+                error_message=str(processing_error)[:500],
+            )
             await self._finalize_failure(
                 run_id=run_id,
                 page_id=page_id,
@@ -102,7 +143,36 @@ class FetcherCoreService:
         page_id: str,
         next_depth: int,
     ):
+        log_event(
+            logger,
+            logging.INFO,
+            "fetch.page.fetcher_call.start",
+            service=self.service_name,
+            run_id=run_id,
+            page_id=page_id,
+            site_id=fetch_message["site_id"],
+            page_url=fetch_message["url"],
+            page_depth=fetch_message["depth"],
+        )
+
         fetched_page = await fetcher_adapter.fetch_page(fetch_message["url"])
+
+        log_event(
+            logger,
+            logging.INFO,
+            "fetch.page.fetcher_call.completed",
+            service=self.service_name,
+            run_id=run_id,
+            page_id=page_id,
+            site_id=fetch_message["site_id"],
+            page_url=fetch_message["url"],
+            page_depth=fetch_message["depth"],
+            fetched_http_status=fetched_page.http_status_code,
+            discovered_links_count=len(fetched_page.discovered_urls),
+            has_etag=fetched_page.etag is not None,
+            has_last_modified=fetched_page.last_modified is not None,
+        )
+
         content_hash = self._compute_content_hash(fetched_page.html_content)
         is_root_page = fetch_message["depth"] == 0
         page_status = PAGE_STATUS_NEW
