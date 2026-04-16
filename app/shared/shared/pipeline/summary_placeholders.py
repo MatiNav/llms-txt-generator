@@ -20,10 +20,6 @@ def section_short_summary_placeholder(section_key: str) -> str:
     return f"{{{{LLM_SUMMARY:section:{section_key}:short}}}}"
 
 
-def page_summary_placeholder(page_url: str) -> str:
-    return f"{{{{LLM_SUMMARY:page:{page_url}}}}}"
-
-
 def extract_placeholders(file_content: str) -> list[str]:
     return PLACEHOLDER_PATTERN.findall(file_content)
 

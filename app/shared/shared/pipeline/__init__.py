@@ -22,7 +22,6 @@ from shared.pipeline.artifact_keys import generated_bundle_key, generated_prefix
 from shared.pipeline.summary_placeholders import (
     apply_replacements,
     extract_placeholders,
-    page_summary_placeholder,
     root_details_placeholder,
     root_summary_placeholder,
     section_short_summary_placeholder,
@@ -49,7 +48,6 @@ __all__ = [
     "root_summary_placeholder",
     "section_summary_placeholder",
     "section_short_summary_placeholder",
-    "page_summary_placeholder",
     "extract_placeholders",
     "apply_replacements",
     "build_llm_generation_requested_message",

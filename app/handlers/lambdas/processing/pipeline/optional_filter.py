@@ -29,7 +29,6 @@ CATEGORY_CAP = {
 
 SOURCE_SCORE = {
     "homepage": 2,
-    "root_page": 1,
 }
 
 CONTACT_KEYWORDS = {"contact", "support", "help", "email"}

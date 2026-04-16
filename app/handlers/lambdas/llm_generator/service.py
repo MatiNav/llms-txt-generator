@@ -10,7 +10,6 @@ from handlers.lambdas.llm_generator.openai_client import (
 from handlers.lambdas.llm_generator.repository import (
     LlmGenerationRunContext,
     LlmGeneratorRepository,
-    PageSummaryContext,
 )
 from shared.constants.run_state import RUN_STATE_READY_FOR_LLM_GENERATION
 from shared.logging import log_decision, log_event
@@ -28,7 +27,6 @@ class PlaceholderDescriptor:
     token: str
     token_kind: str
     section_key: str | None
-    page_url: str | None
 
 
 class LlmGeneratorService:
@@ -53,11 +51,9 @@ class LlmGeneratorService:
             if not generated_keys:
                 raise FatalLlmError("No generated artifacts found for llm generation")
 
-            page_context_by_url = await self.repository.get_page_context_by_url(run_id)
             replacement_count = await self._enrich_generated_files(
                 run_id=run_id,
                 generated_keys=generated_keys,
-                page_context_by_url=page_context_by_url,
             )
 
             bundle_key = await self.artifact_storage.write_bundle_zip(
@@ -133,7 +129,6 @@ class LlmGeneratorService:
         *,
         run_id: str,
         generated_keys: list[str],
-        page_context_by_url: dict[str, PageSummaryContext],
     ) -> int:
         replacement_count = 0
         for generated_key in generated_keys:
@@ -144,7 +139,6 @@ class LlmGeneratorService:
 
             replacements = await self._build_replacements(
                 placeholder_tokens=placeholder_tokens,
-                page_context_by_url=page_context_by_url,
             )
             if not replacements:
                 continue
@@ -163,7 +157,6 @@ class LlmGeneratorService:
         self,
         *,
         placeholder_tokens: list[str],
-        page_context_by_url: dict[str, PageSummaryContext],
     ) -> dict[str, str]:
         replacements: dict[str, str] = {}
         unique_tokens = sorted(set(placeholder_tokens))
@@ -181,7 +174,6 @@ class LlmGeneratorService:
 
             replacements[placeholder_token] = await self._generate_replacement_text(
                 descriptor=descriptor,
-                page_context_by_url=page_context_by_url,
             )
 
         return replacements
@@ -190,7 +182,6 @@ class LlmGeneratorService:
         self,
         *,
         descriptor: PlaceholderDescriptor,
-        page_context_by_url: dict[str, PageSummaryContext],
     ) -> str:
         if descriptor.token_kind == "root_summary":
             prompt = _build_root_summary_prompt()
@@ -224,17 +215,6 @@ class LlmGeneratorService:
             return await self.openai_client.generate_summary(
                 prompt=prompt,
                 max_output_tokens=60,
-            )
-
-        if descriptor.token_kind == "page_summary" and descriptor.page_url is not None:
-            page_context = page_context_by_url.get(descriptor.page_url)
-            if page_context is None:
-                return "Summary unavailable"
-
-            prompt = _build_page_prompt(page_context)
-            return await self.openai_client.generate_summary(
-                prompt=prompt,
-                max_output_tokens=120,
             )
 
         return "Summary unavailable"
@@ -275,21 +255,18 @@ def _parse_placeholder_token(placeholder_token: str) -> PlaceholderDescriptor | 
             token=placeholder_token,
             token_kind="root_summary",
             section_key=None,
-            page_url=None,
         )
     if token_parts == ["root", "details"]:
         return PlaceholderDescriptor(
             token=placeholder_token,
             token_kind="root_details",
             section_key=None,
-            page_url=None,
         )
     if len(token_parts) == 2 and token_parts[0] == "section":
         return PlaceholderDescriptor(
             token=placeholder_token,
             token_kind="section_summary",
             section_key=token_parts[1],
-            page_url=None,
         )
     if (
         len(token_parts) == 3
@@ -300,15 +277,6 @@ def _parse_placeholder_token(placeholder_token: str) -> PlaceholderDescriptor | 
             token=placeholder_token,
             token_kind="section_short_summary",
             section_key=token_parts[1],
-            page_url=None,
-        )
-    if token_content.startswith("page:"):
-        page_url = token_content[len("page:") :]
-        return PlaceholderDescriptor(
-            token=placeholder_token,
-            token_kind="page_summary",
-            section_key=None,
-            page_url=page_url,
         )
     return None
 
@@ -336,26 +304,4 @@ def _build_section_prompt(*, section_key: str, short_summary: bool) -> str:
     return (
         f"Write a concise paragraph describing the '{section_key}' section for llms.txt. "
         "Return plain text only."
-    )
-
-
-def _build_page_prompt(page_context: PageSummaryContext) -> str:
-    title_text = page_context.title or ""
-    h1_text = page_context.h1 or ""
-    meta_description_text = (
-        page_context.meta_description or page_context.og_description or ""
-    )
-    content_length_text = (
-        str(page_context.content_length)
-        if page_context.content_length is not None
-        else "unknown"
-    )
-
-    return (
-        "Summarize the following webpage for an llms.txt index in one concise sentence.\n"
-        f"URL: {page_context.url}\n"
-        f"Title: {title_text}\n"
-        f"Heading: {h1_text}\n"
-        f"Description: {meta_description_text}\n"
-        f"Content length: {content_length_text}"
     )

@@ -119,13 +119,15 @@ class ProcessingLambdaHandler(BaseLambdaHandler):
             site_id=site_id,
         )
 
-        processing_result = await self.runtime.processing_service.process_run(
-            run_id=run_id,
-            site_id=site_id,
+        should_publish_llm_generation = (
+            await self.runtime.processing_service.process_run(
+                run_id=run_id,
+                site_id=site_id,
+            )
         )
         await self.runtime.processing_service.repository.database_session.commit()
 
-        if not processing_result.should_publish_llm_generation:
+        if not should_publish_llm_generation:
             log_decision(
                 logger,
                 decision_name="processing.skip_llm_generation_publish",
