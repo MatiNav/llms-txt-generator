@@ -1,12 +1,10 @@
 import logging
-from dataclasses import dataclass
 
 from handlers.lambdas.processing.artifact_storage import ProcessingArtifactStorage
 from handlers.lambdas.processing.pipeline import (
     build_document_ir,
     extract_processed_page,
     group_pages_by_section,
-    infer_output_mode,
     render_documents,
     render_ctx_documents,
     select_eligible_pages,
@@ -27,18 +25,6 @@ from shared.pipeline.processing_types import (
 logger = logging.getLogger(__name__)
 
 
-@dataclass(frozen=True)
-class ProcessingResult:
-    run_id: str
-    site_id: str
-    should_publish_llm_generation: bool
-
-
-@dataclass(frozen=True)
-class RenderedOutputBundle:
-    rendered_files: list[RenderedFile]
-
-
 class ProcessingService:
     def __init__(
         self,
@@ -49,7 +35,7 @@ class ProcessingService:
         self.repository = repository
         self.artifact_storage = artifact_storage
 
-    async def process_run(self, *, run_id: str, site_id: str) -> ProcessingResult:
+    async def process_run(self, *, run_id: str, site_id: str) -> bool:
         decision_context = {
             "run_id": run_id,
             "site_id": site_id,
@@ -66,11 +52,10 @@ class ProcessingService:
 
         queue_is_consistent = await self._enforce_queue_consistency(
             run_id=run_id,
-            site_id=site_id,
             decision_context=decision_context,
         )
         if not queue_is_consistent:
-            return self._failed_result(run_id=run_id, site_id=site_id)
+            return self._failed_result()
 
         fetched_pages = await self.repository.list_fetched_pages_for_processing(run_id)
         processed_pages = await self._extract_pages(
@@ -84,20 +69,19 @@ class ProcessingService:
         if not eligible_pages:
             await self._fail_run_for_no_eligible_pages(
                 run_id=run_id,
-                site_id=site_id,
                 fetched_page_count=len(fetched_pages),
                 extracted_page_count=len(processed_pages),
                 decision_context=decision_context,
             )
-            return self._failed_result(run_id=run_id, site_id=site_id)
+            return self._failed_result()
 
-        rendered_output_bundle = self._build_rendered_outputs(
+        rendered_files = self._build_rendered_outputs(
             eligible_pages=eligible_pages,
             decision_context=decision_context,
         )
         generated_keys = await self._persist_rendered_outputs(
             run_id=run_id,
-            rendered_files=rendered_output_bundle.rendered_files,
+            rendered_files=rendered_files,
         )
         self._require_generated_key(generated_keys, "llms.txt")
         self._require_generated_key(generated_keys, "llms-ctx.txt")
@@ -105,13 +89,9 @@ class ProcessingService:
         await self._finalize_ready_run(
             run_id=run_id,
             site_id=site_id,
-            rendered_file_count=len(rendered_output_bundle.rendered_files),
+            rendered_file_count=len(rendered_files),
         )
-        return ProcessingResult(
-            run_id=run_id,
-            site_id=site_id,
-            should_publish_llm_generation=True,
-        )
+        return True
 
     async def _load_run_snapshot_or_raise(self, run_id: str) -> RunSnapshot:
         run_snapshot = await self.repository.get_run_snapshot(run_id)
@@ -125,7 +105,7 @@ class ProcessingService:
         run_snapshot: RunSnapshot,
         site_id: str,
         decision_context: dict[str, str],
-    ) -> tuple[bool, ProcessingResult]:
+    ) -> tuple[bool, bool]:
         if run_snapshot.site_id != site_id:
             log_decision(
                 logger,
@@ -145,10 +125,7 @@ class ProcessingService:
                 run_state=run_snapshot.state,
                 **decision_context,
             )
-            return True, self._failed_result(
-                run_id=run_snapshot.run_id,
-                site_id=site_id,
-            )
+            return True, self._failed_result()
 
         if run_snapshot.state != RUN_STATE_PROCESSING:
             if run_snapshot.state == RUN_STATE_READY_FOR_LLM_GENERATION:
@@ -159,10 +136,7 @@ class ProcessingService:
                     run_state=run_snapshot.state,
                     **decision_context,
                 )
-                return True, self._failed_result(
-                    run_id=run_snapshot.run_id,
-                    site_id=site_id,
-                )
+                return True, self._failed_result()
 
             log_decision(
                 logger,
@@ -175,16 +149,12 @@ class ProcessingService:
                 f"Run state must be '{RUN_STATE_PROCESSING}', got '{run_snapshot.state}'"
             )
 
-        return False, self._failed_result(
-            run_id=run_snapshot.run_id,
-            site_id=site_id,
-        )
+        return False, self._failed_result()
 
     async def _enforce_queue_consistency(
         self,
         *,
         run_id: str,
-        site_id: str,
         decision_context: dict[str, str],
     ) -> bool:
         queued_pages_count = await self.repository.queued_pages_count(run_id)
@@ -208,7 +178,6 @@ class ProcessingService:
         self,
         *,
         run_id: str,
-        site_id: str,
         fetched_page_count: int,
         extracted_page_count: int,
         decision_context: dict[str, str],
@@ -231,7 +200,7 @@ class ProcessingService:
         *,
         eligible_pages: list[ProcessedPage],
         decision_context: dict[str, str],
-    ) -> RenderedOutputBundle:
+    ) -> list[RenderedFile]:
         section_groups = group_pages_by_section(
             eligible_pages,
             decision_context=decision_context,
@@ -245,13 +214,7 @@ class ProcessingService:
             decision_context=decision_context,
         )
         rendered_files.extend(render_ctx_documents(root_document))
-        infer_output_mode(
-            rendered_files,
-            decision_context=decision_context,
-        )
-        return RenderedOutputBundle(
-            rendered_files=rendered_files,
-        )
+        return rendered_files
 
     async def _persist_rendered_outputs(
         self,
@@ -302,12 +265,8 @@ class ProcessingService:
         )
 
     @staticmethod
-    def _failed_result(*, run_id: str, site_id: str) -> ProcessingResult:
-        return ProcessingResult(
-            run_id=run_id,
-            site_id=site_id,
-            should_publish_llm_generation=False,
-        )
+    def _failed_result() -> bool:
+        return False
 
     async def _extract_pages(
         self,

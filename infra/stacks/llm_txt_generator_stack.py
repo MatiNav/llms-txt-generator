@@ -137,17 +137,9 @@ class LlmTxtGeneratorStack(Stack):
 
         emit_stack_outputs(
             stack=self,
-            generate_api_service=generate_api_service,
             domain_service=domain_service,
             discoverability_queue_service=discoverability_queue_service,
             raw_html_storage=raw_html_storage,
             generated_output_storage=generated_output_storage,
-            llm_generation_queue_service=llm_generation_queue_service,
-            orchestrator_service=orchestrator_service,
-            http_fetcher_service=http_fetcher_service,
-            processing_service=processing_service,
-            llm_generator_service=llm_generator_service,
-            site_refresher_service=site_refresher_service,
-            spa_fetcher_service=spa_fetcher_service,
             generation_data_storage=generation_data_storage,
         )

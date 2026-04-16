@@ -103,7 +103,7 @@ def _collect_optional_candidates(
 
     optional_candidates: list[OptionalCandidate] = []
     for source_page in homepage_resource_pages:
-        source_kind = _resource_source_kind(source_page.url)
+        source_kind = "homepage"
         source_context = source_page.title or source_page.h1
 
         for external_url in sorted(source_page.external_links):
@@ -168,12 +168,6 @@ def _is_homepage_like(page_url: str) -> bool:
     parsed_url = urlparse(page_url)
     normalized_path = parsed_url.path.rstrip("/")
     return normalized_path == ""
-
-
-def _resource_source_kind(source_url: str) -> str:
-    if _is_homepage_like(source_url):
-        return "homepage"
-    return "root_page"
 
 
 def _derive_root_title(section_groups: list[SectionGroup]) -> str:

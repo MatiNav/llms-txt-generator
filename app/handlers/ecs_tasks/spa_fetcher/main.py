@@ -1,5 +1,4 @@
 import asyncio
-import json
 import logging
 from typing import Any
 
@@ -10,6 +9,7 @@ from handlers.ecs_tasks.spa_fetcher.runtime import (
 from shared.constants.render_mode import RENDER_MODE_SPA
 from shared.logging import configure_json_logging, log_event
 from shared.pipeline.fetch_message import parse_fetch_requested_message
+from shared.pipeline.json_payload import parse_json_object_payload
 
 
 logger = logging.getLogger(__name__)
@@ -21,9 +21,7 @@ async def process_raw_message(
     receipt_handle = raw_message.get("ReceiptHandle")
     raw_body = str(raw_message.get("Body", "{}"))
 
-    parsed_payload = json.loads(raw_body)
-    if not isinstance(parsed_payload, dict):
-        raise ValueError("SQS message body must be a JSON object")
+    parsed_payload = parse_json_object_payload(raw_body)
 
     fetch_message = parse_fetch_requested_message(parsed_payload)
     if fetch_message["render_mode"] != RENDER_MODE_SPA:

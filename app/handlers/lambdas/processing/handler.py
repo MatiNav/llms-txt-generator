@@ -1,4 +1,3 @@
-import json
 import logging
 from typing import Any
 
@@ -9,6 +8,7 @@ from shared.logging import log_decision, log_event
 from shared.pipeline.llm_generation_message import (
     build_llm_generation_requested_message,
 )
+from shared.pipeline.json_payload import parse_json_object_payload
 from shared.pipeline.processing_message import parse_processing_requested_message
 
 
@@ -71,9 +71,7 @@ async def _republish_if_run_is_ready_for_llm_generation(
 
 
 def _parse_processing_message(raw_body: str) -> dict[str, str]:
-    parsed_payload = json.loads(raw_body)
-    if not isinstance(parsed_payload, dict):
-        raise ValueError("SQS message body must be a JSON object")
+    parsed_payload = parse_json_object_payload(raw_body)
     return parse_processing_requested_message(parsed_payload)
 
 
@@ -121,13 +119,15 @@ class ProcessingLambdaHandler(BaseLambdaHandler):
             site_id=site_id,
         )
 
-        processing_result = await self.runtime.processing_service.process_run(
-            run_id=run_id,
-            site_id=site_id,
+        should_publish_llm_generation = (
+            await self.runtime.processing_service.process_run(
+                run_id=run_id,
+                site_id=site_id,
+            )
         )
         await self.runtime.processing_service.repository.database_session.commit()
 
-        if not processing_result.should_publish_llm_generation:
+        if not should_publish_llm_generation:
             log_decision(
                 logger,
                 decision_name="processing.skip_llm_generation_publish",

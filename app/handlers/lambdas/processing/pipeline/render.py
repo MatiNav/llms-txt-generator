@@ -40,33 +40,6 @@ def render_documents(
     return rendered_files
 
 
-def infer_output_mode(
-    rendered_files: list[RenderedFile],
-    *,
-    decision_context: dict[str, str] | None = None,
-) -> str:
-    context_fields = decision_context or {}
-    has_leaf_documents = any(
-        rendered_file.relative_path != "llms.txt" for rendered_file in rendered_files
-    )
-    output_mode = "hierarchical" if has_leaf_documents else "single_file"
-
-    log_decision(
-        logger,
-        decision_name="render.output_mode_inferred",
-        reason=(
-            "at least one non-root rendered file exists"
-            if has_leaf_documents
-            else "only root llms.txt exists"
-        ),
-        output_mode=output_mode,
-        rendered_file_count=len(rendered_files),
-        **context_fields,
-    )
-
-    return output_mode
-
-
 def _render_root_file(root_document: RootDocumentIR) -> RenderedFile:
     lines: list[str] = [
         f"# {root_document.root_title}",

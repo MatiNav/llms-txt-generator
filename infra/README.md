@@ -20,7 +20,6 @@ Deployment model: **single stack** (`LlmTxtGeneratorStack`) composed from intern
 ## Outputs used by the server runtime
 
 - `DiscoverableQueueUrl` → `DISCOVERABLE_QUEUE_URL`
-- `ServerRuntimeRoleArn` → App Runner instance role ARN
 - App Runner runtime receives `DATABASE_URL` from the data component inside `LlmTxtGeneratorStack`
 
 ## Commands
