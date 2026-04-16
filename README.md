@@ -37,6 +37,8 @@ This system crawls websites, generates `llms.txt` artifacts, and keeps sites ref
 - **Data**: RDS PostgreSQL + S3 (raw html + generated outputs)
 - **External**: OpenAI API for enrichment phase
 
+![Infrastructure Design](./infra-design.png)
+
 ---
 
 ## Prerequisites
